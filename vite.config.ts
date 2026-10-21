@@ -23,15 +23,15 @@ export default defineConfig(() => {
           'pwa-maskable-512x512.png',
         ],
         manifest: {
-          id: 'homeorganizer-pwa',
           name: 'HomeOrganizer 家庭智慧生活收納管家',
           short_name: '居家收納管家',
           description: '專為家庭打造的物品拍照收納、層級容器管理、耗材到期追蹤、條碼掃描與家庭行事曆備忘工具。',
           theme_color: '#0d9488',
           background_color: '#0f172a',
           display: 'standalone',
+          display_override: ['standalone', 'minimal-ui', 'browser'],
           orientation: 'portrait',
-          start_url: './',
+          start_url: './index.html',
           scope: './',
           icons: [
             {
