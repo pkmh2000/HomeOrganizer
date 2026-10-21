@@ -14,6 +14,16 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="居家收納管家" />
+
+    <!-- GitHub Pages Subpath Trailing Slash Fix: Prevents 404 white screen on desktop/mobile -->
+    <script>
+      (function() {
+        var path = window.location.pathname;
+        if (!path.endsWith('/') && !path.split('/').pop().includes('.')) {
+          window.location.replace(path + '/' + window.location.search + window.location.hash);
+        }
+      })();
+    </script>
     
     <!-- PWA Manifest & Icons with relative paths for GitHub Pages subpath support -->
     <link rel="manifest" href="./manifest.json" />
@@ -24,19 +34,6 @@
   </head>
   <body class="h-full bg-slate-950 text-slate-100 antialiased select-none selection:bg-teal-500 selection:text-white">
     <div id="root" class="h-full flex flex-col"></div>
-    <script type="module" src="./src/main.tsx"></script>
-
-    <!-- Standalone Service Worker Registration with relative scope for GitHub Pages -->
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js').then((reg) => {
-            console.log('HomeOrganizer ServiceWorker registered with scope:', reg.scope);
-          }).catch((err) => {
-            console.warn('ServiceWorker registration error:', err);
-          });
-        });
-      }
-    </script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

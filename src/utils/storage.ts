@@ -431,7 +431,12 @@ export function loadNodes(): InventoryNode[] {
       saveNodes(INITIAL_SAMPLE_NODES);
       return INITIAL_SAMPLE_NODES;
     }
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      saveNodes(INITIAL_SAMPLE_NODES);
+      return INITIAL_SAMPLE_NODES;
+    }
+    return parsed;
   } catch (e) {
     console.error('Failed to load nodes from localStorage', e);
     return INITIAL_SAMPLE_NODES;
@@ -453,7 +458,12 @@ export function loadMemos(): FamilyMemo[] {
       saveMemos(INITIAL_SAMPLE_MEMOS);
       return INITIAL_SAMPLE_MEMOS;
     }
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      saveMemos(INITIAL_SAMPLE_MEMOS);
+      return INITIAL_SAMPLE_MEMOS;
+    }
+    return parsed;
   } catch (e) {
     console.error('Failed to load memos', e);
     return INITIAL_SAMPLE_MEMOS;
@@ -475,7 +485,12 @@ export function loadMembers(): string[] {
       saveMembers(DEFAULT_MEMBERS);
       return DEFAULT_MEMBERS;
     }
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      saveMembers(DEFAULT_MEMBERS);
+      return DEFAULT_MEMBERS;
+    }
+    return parsed;
   } catch (e) {
     return DEFAULT_MEMBERS;
   }
