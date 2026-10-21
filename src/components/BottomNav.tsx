@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import { ViewTab } from '../types';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface BottomNavProps {
   activeTab: ViewTab;
@@ -50,13 +51,16 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         {/* Desk Header Handle */}
         <div className="flex items-center justify-between pb-2 border-b border-slate-800/80 mb-2">
           <span className="text-[11px] font-bold text-slate-400">功能導航盤 (選取後自動收起)</span>
-          <button
-            onClick={onCloseDesk}
-            className="flex items-center gap-1 text-[11px] text-teal-400 hover:text-teal-300 font-semibold px-2 py-0.5 rounded-lg bg-slate-800"
-          >
-            <ChevronDown className="w-3.5 h-3.5" />
-            <span>收起導航盤</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <PWAInstallButton variant="navbar" />
+            <button
+              onClick={onCloseDesk}
+              className="flex items-center gap-1 text-[11px] text-teal-400 hover:text-teal-300 font-semibold px-2 py-0.5 rounded-lg bg-slate-800"
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+              <span>收起導航盤</span>
+            </button>
+          </div>
         </div>
 
         {/* Action Buttons Row */}

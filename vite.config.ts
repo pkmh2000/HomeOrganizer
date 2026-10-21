@@ -13,9 +13,17 @@ export default defineConfig(() => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],
+        manifestFilename: 'manifest.json',
+        includeAssets: [
+          'favicon.ico',
+          'apple-touch-icon.png',
+          'icon.svg',
+          'pwa-192x192.png',
+          'pwa-512x512.png',
+          'pwa-maskable-512x512.png',
+        ],
         manifest: {
-          id: './',
+          id: 'homeorganizer-pwa',
           name: 'HomeOrganizer 家庭智慧生活收納管家',
           short_name: '居家收納管家',
           description: '專為家庭打造的物品拍照收納、層級容器管理、耗材到期追蹤、條碼掃描與家庭行事曆備忘工具。',

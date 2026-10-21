@@ -26,6 +26,7 @@ import { VisualSearchModal } from './components/VisualSearchModal';
 import { PrintableLabelModal } from './components/PrintableLabelModal';
 import { SuggestionsModal } from './components/SuggestionsModal';
 import { GeminiAssistantModal } from './components/GeminiAssistantModal';
+import { MobileInstallBanner } from './components/MobileInstallBanner';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { WifiOff, Camera, Plus, PanelBottomOpen, Layers } from 'lucide-react';
 
@@ -252,6 +253,9 @@ export default function App() {
         currentContainerId={currentContainerId}
         onBackContainer={handleBackContainer}
       />
+
+      {/* Mobile PWA Install Reminder Banner (prompts when on mobile and not installed) */}
+      <MobileInstallBanner />
 
       {/* Main View Area (100% focused on current function) */}
       <main className="flex-1 flex flex-col min-h-0 overflow-hidden relative">

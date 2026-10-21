@@ -19,6 +19,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { ViewTab } from '../types';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface NavbarProps {
   householdName: string;
@@ -119,6 +120,9 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right Tools: Direct action shortcuts */}
         <div className="flex items-center gap-1 shrink-0">
+          {/* PWA Install Button (automatically adapts to native prompt or guides iOS/Android users) */}
+          <PWAInstallButton variant="navbar" />
+
           {/* Gemini AI Assistant Button */}
           <button
             onClick={onOpenGemini}
@@ -218,6 +222,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
               );
             })}
+          </div>
+          <div className="pt-2 mt-2 border-t border-slate-800 flex items-center justify-between">
+            <span className="text-[11px] text-slate-400">📲 離線自成一體・加到手機桌面</span>
+            <PWAInstallButton variant="navbar" />
           </div>
         </div>
       )}

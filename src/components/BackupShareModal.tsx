@@ -18,6 +18,7 @@ import {
   Cpu,
 } from 'lucide-react';
 import { InventoryNode, FamilyMemo, HouseholdData } from '../types';
+import { PWAInstallButton } from './PWAInstallButton';
 import {
   exportFullHousehold,
   exportContainerSubtree,
@@ -211,6 +212,11 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
           透過分享連結開啟或安裝至桌面後，<strong>本應用即自成一體</strong>：所有收納資料、照片、條碼與到期排程均完全保存在您的設備本機。
           <strong>平時無須與伺服器連線即可永久正常使用</strong>，僅在有新版本釋出時於背景獲取更新！
         </p>
+
+        {/* One-click PWA Install / Mobile Home Screen Action */}
+        <div className="pt-1">
+          <PWAInstallButton variant="card" />
+        </div>
 
         <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
           <span className="text-[11px] text-slate-400">
