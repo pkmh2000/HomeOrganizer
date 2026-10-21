@@ -15,6 +15,8 @@ import {
   CalendarRange,
   Search,
   AlertTriangle,
+  Layers,
+  ArrowDownCircle,
 } from 'lucide-react';
 import { InventoryNode, FamilyMemo } from '../types';
 import { getExpirationStatus } from '../utils/storage';
@@ -36,7 +38,7 @@ export interface CalendarEvent {
   memo?: FamilyMemo;
 }
 
-type CalendarViewMode = 'all_timeline' | 'month_grid' | 'year_overview';
+type CalendarViewMode = 'continuous_feed' | 'all_timeline' | 'month_grid' | 'year_overview';
 
 export const FamilyCalendarView: React.FC<FamilyCalendarViewProps> = ({
   nodes,
@@ -44,10 +46,12 @@ export const FamilyCalendarView: React.FC<FamilyCalendarViewProps> = ({
   onSelectNode,
   onNavigateToContainer,
 }) => {
-  const [viewMode, setViewMode] = useState<CalendarViewMode>('all_timeline');
+  // Default to continuous multi-month feed so user is NEVER limited to only a single month!
+  const [viewMode, setViewMode] = useState<CalendarViewMode>('continuous_feed');
   const [activeFilter, setActiveFilter] = useState<'all' | 'expiration' | 'warranty' | 'maintenance' | 'loan_return' | 'memo'>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  
+  const [showSubsequentMonthsInGrid, setShowSubsequentMonthsInGrid] = useState(true);
+
   const [currentYearMonth, setCurrentYearMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -147,7 +151,28 @@ export const FamilyCalendarView: React.FC<FamilyCalendarViewProps> = ({
     });
   }, [allEvents, activeFilter, searchTerm]);
 
-  // Group events by time ranges for "all_timeline" view
+  // Group events by Month for Continuous Multi-Month Feed
+  const monthlyGroups = useMemo(() => {
+    const groups: { [monthKey: string]: CalendarEvent[] } = {};
+    filteredEvents.forEach((evt) => {
+      const ym = evt.date.substring(0, 7); // "YYYY-MM"
+      if (!groups[ym]) groups[ym] = [];
+      groups[ym].push(evt);
+    });
+
+    return Object.keys(groups)
+      .sort()
+      .map((ym) => {
+        const [year, month] = ym.split('-');
+        return {
+          ym,
+          label: `${year} 年 ${Number(month)} 月`,
+          items: groups[ym],
+        };
+      });
+  }, [filteredEvents]);
+
+  // Group events by time urgency for "all_timeline" view
   const timelineGroups = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -208,6 +233,9 @@ export const FamilyCalendarView: React.FC<FamilyCalendarViewProps> = ({
   // Events in this selected month
   const currentMonthEvents = filteredEvents.filter((e) => e.date.startsWith(currentYearMonth));
 
+  // Events subsequent to the selected month (future previews so users can see beyond one month!)
+  const subsequentEvents = filteredEvents.filter((e) => e.date > `${currentYearMonth}-31`);
+
   // Events filtered by selected day in month grid
   const dayEvents = selectedDay
     ? filteredEvents.filter((e) => e.date === selectedDay)
@@ -231,56 +259,66 @@ export const FamilyCalendarView: React.FC<FamilyCalendarViewProps> = ({
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-slate-950 pb-20">
       {/* Top Header & View Modes Switcher */}
-      <div className="p-4 bg-slate-900 border-b border-slate-800 space-y-3">
+      <div className="p-3.5 bg-slate-900 border-b border-slate-800 space-y-2.5">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-              <CalendarIcon className="w-5 h-5 text-teal-400" />
-              家庭物資行事曆
+            <h2 className="text-sm font-bold text-slate-100 flex items-center gap-1.5">
+              <CalendarIcon className="w-4 h-4 text-teal-400" />
+              <span>家庭物資與到期行事曆</span>
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              掌握耗材到期、保修期滿、維修保養與外借應還
+            <p className="text-[11px] text-slate-400">
+              跨越所有月份追蹤耗材、保固期與維修歸還
             </p>
           </div>
-          <span className="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-teal-300 font-bold border border-slate-700">
-            全部 {allEvents.length} 項排程
+          <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-teal-300 font-bold border border-slate-700">
+            全部 {allEvents.length} 項
           </span>
         </div>
 
-        {/* 3 View Mode Switchers: All Upcoming, Month Grid, Year Overview */}
-        <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-slate-800/80 border border-slate-700/60 text-xs">
+        {/* 4 View Modes Switcher */}
+        <div className="grid grid-cols-4 gap-1 p-1 rounded-xl bg-slate-800/80 border border-slate-700/60 text-xs">
           <button
-            onClick={() => setViewMode('all_timeline')}
-            className={`py-1.5 rounded-lg font-bold flex items-center justify-center gap-1.5 transition ${
-              viewMode === 'all_timeline'
+            onClick={() => setViewMode('continuous_feed')}
+            className={`py-1.5 px-1 rounded-lg font-bold flex flex-col items-center justify-center transition ${
+              viewMode === 'continuous_feed'
                 ? 'bg-teal-500 text-slate-950 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <ListFilter className="w-3.5 h-3.5" />
-            <span>全部近期時間軸</span>
+            <span className="text-[11px]">跨月連續</span>
           </button>
+
           <button
             onClick={() => setViewMode('month_grid')}
-            className={`py-1.5 rounded-lg font-bold flex items-center justify-center gap-1.5 transition ${
+            className={`py-1.5 px-1 rounded-lg font-bold flex flex-col items-center justify-center transition ${
               viewMode === 'month_grid'
                 ? 'bg-teal-500 text-slate-950 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Grid className="w-3.5 h-3.5" />
-            <span>月曆網格</span>
+            <span className="text-[11px]">月曆網格</span>
           </button>
+
+          <button
+            onClick={() => setViewMode('all_timeline')}
+            className={`py-1.5 px-1 rounded-lg font-bold flex flex-col items-center justify-center transition ${
+              viewMode === 'all_timeline'
+                ? 'bg-teal-500 text-slate-950 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <span className="text-[11px]">緊急時間軸</span>
+          </button>
+
           <button
             onClick={() => setViewMode('year_overview')}
-            className={`py-1.5 rounded-lg font-bold flex items-center justify-center gap-1.5 transition ${
+            className={`py-1.5 px-1 rounded-lg font-bold flex flex-col items-center justify-center transition ${
               viewMode === 'year_overview'
                 ? 'bg-teal-500 text-slate-950 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <CalendarRange className="w-3.5 h-3.5" />
-            <span>全年度總覽</span>
+            <span className="text-[11px]">全年度</span>
           </button>
         </div>
 
@@ -300,7 +338,7 @@ export const FamilyCalendarView: React.FC<FamilyCalendarViewProps> = ({
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs">
           <button
             onClick={() => setActiveFilter('all')}
-            className={`px-3 py-1 rounded-lg shrink-0 transition ${
+            className={`px-2.5 py-1 rounded-lg shrink-0 transition text-xs ${
               activeFilter === 'all'
                 ? 'bg-teal-500 text-slate-950 font-bold'
                 : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -310,7 +348,7 @@ export const FamilyCalendarView: React.FC<FamilyCalendarViewProps> = ({
           </button>
           <button
             onClick={() => setActiveFilter('expiration')}
-            className={`px-3 py-1 rounded-lg shrink-0 transition ${
+            className={`px-2.5 py-1 rounded-lg shrink-0 transition text-xs ${
               activeFilter === 'expiration'
                 ? 'bg-amber-500 text-slate-950 font-bold'
                 : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -320,17 +358,17 @@ export const FamilyCalendarView: React.FC<FamilyCalendarViewProps> = ({
           </button>
           <button
             onClick={() => setActiveFilter('warranty')}
-            className={`px-3 py-1 rounded-lg shrink-0 transition ${
+            className={`px-2.5 py-1 rounded-lg shrink-0 transition text-xs ${
               activeFilter === 'warranty'
                 ? 'bg-blue-500 text-white font-bold'
                 : 'bg-slate-800 text-slate-400 hover:text-white'
             }`}
           >
-            保固到期
+            保固期滿
           </button>
           <button
             onClick={() => setActiveFilter('maintenance')}
-            className={`px-3 py-1 rounded-lg shrink-0 transition ${
+            className={`px-2.5 py-1 rounded-lg shrink-0 transition text-xs ${
               activeFilter === 'maintenance'
                 ? 'bg-purple-500 text-white font-bold'
                 : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -340,7 +378,7 @@ export const FamilyCalendarView: React.FC<FamilyCalendarViewProps> = ({
           </button>
           <button
             onClick={() => setActiveFilter('loan_return')}
-            className={`px-3 py-1 rounded-lg shrink-0 transition ${
+            className={`px-2.5 py-1 rounded-lg shrink-0 transition text-xs ${
               activeFilter === 'loan_return'
                 ? 'bg-indigo-500 text-white font-bold'
                 : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -350,36 +388,40 @@ export const FamilyCalendarView: React.FC<FamilyCalendarViewProps> = ({
           </button>
           <button
             onClick={() => setActiveFilter('memo')}
-            className={`px-3 py-1 rounded-lg shrink-0 transition ${
+            className={`px-2.5 py-1 rounded-lg shrink-0 transition text-xs ${
               activeFilter === 'memo'
                 ? 'bg-emerald-500 text-slate-950 font-bold'
                 : 'bg-slate-800 text-slate-400 hover:text-white'
             }`}
           >
-            家庭備忘
+            家庭待辦
           </button>
         </div>
       </div>
 
-      {/* VIEW 1: ALL UPCOMING TIMELINE (Not limited to any single month!) */}
-      {viewMode === 'all_timeline' && (
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          {timelineGroups.length === 0 ? (
+      {/* VIEW 1: CONTINUOUS MULTI-MONTH STREAM (User request: 不只顯示選中的月份，連續滾動所有月份!) */}
+      {viewMode === 'continuous_feed' && (
+        <div className="flex-1 overflow-y-auto p-3.5 space-y-6">
+          {monthlyGroups.length === 0 ? (
             <div className="py-16 text-center text-slate-500">
               <CalendarIcon className="w-12 h-12 mx-auto stroke-[1.5] opacity-40 mb-2" />
-              <p className="text-sm font-semibold">目前沒有符合條件的排程事件</p>
-              <p className="text-xs mt-1">可在各物品中設定有效期限、保修期與維修日期</p>
+              <p className="text-sm font-semibold">目前沒有任何排程事件</p>
+              <p className="text-xs mt-1">可在物品編輯時設定有效期限或保修日期</p>
             </div>
           ) : (
-            timelineGroups.map((group) => (
-              <div key={group.id} className="space-y-2.5">
-                <div className="flex items-center justify-between text-xs px-1">
-                  <span className={`px-2.5 py-0.5 rounded-full font-bold border ${group.badge}`}>
-                    {group.label} ({group.items.length})
+            monthlyGroups.map((group) => (
+              <div key={group.ym} className="space-y-2">
+                <div className="sticky top-0 z-10 py-1 px-2.5 bg-slate-950/90 backdrop-blur-xs flex items-center justify-between border-b border-slate-800">
+                  <span className="font-bold text-sm text-teal-400 flex items-center gap-1.5">
+                    <CalendarRange className="w-4 h-4" />
+                    <span>{group.label}</span>
+                  </span>
+                  <span className="text-xs text-slate-400 bg-slate-900 px-2 py-0.5 rounded-full border border-slate-800">
+                    {group.items.length} 項日程
                   </span>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 pt-1">
                   {group.items.map((evt) => (
                     <EventCard
                       key={evt.id}
@@ -394,14 +436,47 @@ export const FamilyCalendarView: React.FC<FamilyCalendarViewProps> = ({
         </div>
       )}
 
-      {/* VIEW 2: INTERACTIVE MONTH GRID (Calendar Month View) */}
+      {/* VIEW 2: INTERACTIVE MONTH GRID (Calendar Month View with Continuous Subsequent Months Preview) */}
       {viewMode === 'month_grid' && (
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Month Navigator */}
+        <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5">
+          {/* Quick Jump 12 Months Chip Selector */}
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1">
+            {Array.from({ length: 12 }, (_, i) => {
+              const mNum = i + 1;
+              const ym = `${currentYear}-${String(mNum).padStart(2, '0')}`;
+              const isSelected = currentYearMonth === ym;
+              const hasEvents = allEvents.some((e) => e.date.startsWith(ym));
+
+              return (
+                <button
+                  key={mNum}
+                  onClick={() => {
+                    setCurrentYearMonth(ym);
+                    setSelectedDay(null);
+                  }}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold shrink-0 transition relative ${
+                    isSelected
+                      ? 'bg-teal-500 text-slate-950 shadow-sm'
+                      : hasEvents
+                      ? 'bg-slate-800 text-teal-300 border border-teal-500/30'
+                      : 'bg-slate-900 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span>{mNum}月</span>
+                  {hasEvents && !isSelected && (
+                    <span className="w-1 h-1 rounded-full bg-teal-400 absolute top-1 right-1" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Month Navigator Header */}
           <div className="flex items-center justify-between bg-slate-900 p-2 rounded-2xl border border-slate-800">
             <button
               onClick={handlePrevMonth}
               className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800"
+              title="上一月"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -411,6 +486,7 @@ export const FamilyCalendarView: React.FC<FamilyCalendarViewProps> = ({
             <button
               onClick={handleNextMonth}
               className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800"
+              title="下一月"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -431,12 +507,10 @@ export const FamilyCalendarView: React.FC<FamilyCalendarViewProps> = ({
 
             {/* Day Cells */}
             <div className="grid grid-cols-7 gap-1 text-xs">
-              {/* Empty leading days */}
               {Array.from({ length: firstDayOfWeek }).map((_, i) => (
                 <div key={`empty-${i}`} className="h-10 rounded-lg opacity-20" />
               ))}
 
-              {/* Real days */}
               {Array.from({ length: daysInMonth }).map((_, i) => {
                 const dayNum = i + 1;
                 const dateKey = `${currentYearMonth}-${String(dayNum).padStart(2, '0')}`;
@@ -479,13 +553,13 @@ export const FamilyCalendarView: React.FC<FamilyCalendarViewProps> = ({
             </div>
           </div>
 
-          {/* Events on selected day / month */}
+          {/* Events on selected day or current month */}
           <div className="space-y-2 pt-1">
             <div className="text-xs text-slate-400 flex items-center justify-between px-1">
-              <span>
+              <span className="font-semibold text-slate-200">
                 {selectedDay
-                  ? `${selectedDay} 共有 ${dayEvents.length} 項日程`
-                  : `${currentYear}年${currentMonthNum}月 共有 ${dayEvents.length} 項日程`}
+                  ? `${selectedDay} 共有 ${dayEvents.length} 項排程`
+                  : `${currentYear}年${currentMonthNum}月 共有 ${dayEvents.length} 項排程`}
               </span>
               {selectedDay && (
                 <button
@@ -498,8 +572,8 @@ export const FamilyCalendarView: React.FC<FamilyCalendarViewProps> = ({
             </div>
 
             {dayEvents.length === 0 ? (
-              <div className="py-8 text-center text-slate-500 text-xs">
-                此日期無排程事項
+              <div className="py-6 text-center text-slate-500 text-xs bg-slate-900/60 rounded-xl border border-slate-800">
+                本月/當天無排程事項
               </div>
             ) : (
               dayEvents.map((evt) => (
@@ -511,10 +585,73 @@ export const FamilyCalendarView: React.FC<FamilyCalendarViewProps> = ({
               ))
             )}
           </div>
+
+          {/* Continuous Future Months Preview (Beyond Current Month) */}
+          {subsequentEvents.length > 0 && (
+            <div className="pt-4 border-t border-slate-800/80 space-y-2.5">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs font-bold text-teal-400 flex items-center gap-1.5">
+                  <ArrowDownCircle className="w-3.5 h-3.5" />
+                  <span>接續未來月份提醒 ({subsequentEvents.length} 項後續排程)</span>
+                </span>
+                <button
+                  onClick={() => setShowSubsequentMonthsInGrid((prev) => !prev)}
+                  className="text-[11px] text-slate-400 hover:text-white"
+                >
+                  {showSubsequentMonthsInGrid ? '收合' : '展開查看'}
+                </button>
+              </div>
+
+              {showSubsequentMonthsInGrid && (
+                <div className="space-y-2">
+                  {subsequentEvents.map((evt) => (
+                    <EventCard
+                      key={`subseq-${evt.id}`}
+                      event={evt}
+                      onSelectNode={onSelectNode}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
-      {/* VIEW 3: FULL YEAR OVERVIEW (12 Months at a Glance) */}
+      {/* VIEW 3: URGENT TIMELINE (Categorized by Urgency) */}
+      {viewMode === 'all_timeline' && (
+        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+          {timelineGroups.length === 0 ? (
+            <div className="py-16 text-center text-slate-500">
+              <CalendarIcon className="w-12 h-12 mx-auto stroke-[1.5] opacity-40 mb-2" />
+              <p className="text-sm font-semibold">目前沒有符合條件的排程事件</p>
+              <p className="text-xs mt-1">可在各物品中設定有效期限、保修期與維修日期</p>
+            </div>
+          ) : (
+            timelineGroups.map((group) => (
+              <div key={group.id} className="space-y-2.5">
+                <div className="flex items-center justify-between text-xs px-1">
+                  <span className={`px-2.5 py-0.5 rounded-full font-bold border ${group.badge}`}>
+                    {group.label} ({group.items.length})
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {group.items.map((evt) => (
+                    <EventCard
+                      key={evt.id}
+                      event={evt}
+                      onSelectNode={onSelectNode}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* VIEW 4: FULL YEAR OVERVIEW (12 Months at a Glance) */}
       {viewMode === 'year_overview' && (
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div className="flex items-center justify-between px-1 text-xs text-slate-400">
@@ -587,7 +724,7 @@ const EventCard: React.FC<{
       onClick={() => {
         if (event.node) onSelectNode(event.node);
       }}
-      className={`p-3.5 rounded-2xl bg-slate-900 border transition cursor-pointer flex items-center gap-3 shadow-md ${
+      className={`p-3 rounded-2xl bg-slate-900 border transition cursor-pointer flex items-center gap-3 shadow-md ${
         isDanger
           ? 'border-rose-500/40 hover:border-rose-500'
           : isWarning
@@ -596,11 +733,11 @@ const EventCard: React.FC<{
       }`}
     >
       {/* Date Badge */}
-      <div className="w-14 h-14 rounded-xl bg-slate-800 border border-slate-700/80 flex flex-col items-center justify-center shrink-0">
-        <span className="text-[10px] text-slate-400">
-          {event.date.split('-')[1]} 月
+      <div className="w-13 h-13 rounded-xl bg-slate-800 border border-slate-700/80 flex flex-col items-center justify-center shrink-0">
+        <span className="text-[10px] text-slate-400 font-mono">
+          {event.date.split('-')[1]}月
         </span>
-        <span className="text-lg font-black text-slate-100">
+        <span className="text-base font-black text-slate-100">
           {event.date.split('-')[2]}
         </span>
       </div>
@@ -639,11 +776,9 @@ const EventCard: React.FC<{
         </h4>
 
         {event.node && (
-          <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-2">
+          <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-2 truncate">
             <span>數量: {event.node.quantity} {event.node.unit || '個'}</span>
-            {event.node.photos && event.node.photos[0] && (
-              <span>• 點擊查看物品與存放位置</span>
-            )}
+            <span>• 點擊查看物品與空間詳情</span>
           </div>
         )}
       </div>

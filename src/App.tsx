@@ -353,16 +353,30 @@ export default function App() {
           />
         )}
 
-        {/* Floating Quick Action Button when bottom desk is closed */}
+        {/* Floating Controls when bottom desk is closed (User request: 無用的 desk 平時收起，需要才開啟) */}
         {!showBottomDesk && (
-          <div className="fixed bottom-5 right-4 z-30 flex items-center gap-2">
+          <div className="fixed bottom-5 inset-x-0 z-30 flex items-center justify-between px-4 pointer-events-none">
+            {/* Left: Open Desk Toggle Pill */}
+            <button
+              onClick={() => setShowBottomDesk(true)}
+              title="開啟功能導航工作盤"
+              className="pointer-events-auto h-11 px-3.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-teal-400 font-bold text-xs flex items-center gap-1.5 shadow-xl border border-slate-700/80 active:scale-95 transition backdrop-blur-md"
+            >
+              <PanelBottomOpen className="w-4 h-4" />
+              <span>工作盤</span>
+              {expiringCount > 0 && (
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+              )}
+            </button>
+
+            {/* Right: Quick Camera Batch Photo Action */}
             <button
               onClick={() => setIsBatchIntakeOpen(true)}
               title="拍照 / 多照片批次收納"
-              className="h-12 px-4 rounded-full bg-gradient-to-tr from-teal-500 to-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-[0_6px_20px_rgba(20,184,166,0.4)] active:scale-90 transition border border-slate-900 group"
+              className="pointer-events-auto h-11 px-4 rounded-full bg-gradient-to-tr from-teal-500 to-emerald-400 hover:from-teal-400 hover:to-emerald-300 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-[0_6px_20px_rgba(20,184,166,0.4)] active:scale-90 transition border border-slate-900 group"
             >
-              <Camera className="w-5 h-5 stroke-[2.2]" />
-              <span className="hidden sm:inline">拍照收納</span>
+              <Camera className="w-4.5 h-4.5 stroke-[2.2]" />
+              <span>拍照收納</span>
             </button>
           </div>
         )}

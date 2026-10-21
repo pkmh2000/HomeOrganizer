@@ -1,29 +1,29 @@
 {
-  "id": "/",
-  "name": "HomeOrganizer 家庭智慧生活收納管家 (Gemini AI Powered)",
+  "id": "./",
+  "name": "HomeOrganizer 家庭智慧生活收納管家",
   "short_name": "居家收納管家",
   "description": "結合 Gemini AI 智慧拍照辨識、多層級收納容器管理、耗材到期日追蹤與家庭行事曆備忘工具。",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
   "theme_color": "#0d9488",
   "background_color": "#0f172a",
   "icons": [
     {
-      "src": "/pwa-192x192.png",
+      "src": "./pwa-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/pwa-512x512.png",
+      "src": "./pwa-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/pwa-maskable-512x512.png",
+      "src": "./pwa-maskable-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

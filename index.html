@@ -15,22 +15,22 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="居家收納管家" />
     
-    <!-- PWA Manifest & Icons -->
-    <link rel="manifest" href="/manifest.json" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
-    <link rel="icon" type="image/png" sizes="512x512" href="/pwa-512x512.png" />
+    <!-- PWA Manifest & Icons with relative paths for GitHub Pages subpath support -->
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="./pwa-192x192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="./pwa-512x512.png" />
   </head>
   <body class="h-full bg-slate-950 text-slate-100 antialiased select-none selection:bg-teal-500 selection:text-white">
     <div id="root" class="h-full flex flex-col"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" src="./src/main.tsx"></script>
 
-    <!-- Standalone Service Worker Registration -->
+    <!-- Standalone Service Worker Registration with relative scope for GitHub Pages -->
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').then((reg) => {
+          navigator.serviceWorker.register('./sw.js').then((reg) => {
             console.log('HomeOrganizer ServiceWorker registered with scope:', reg.scope);
           }).catch((err) => {
             console.warn('ServiceWorker registration error:', err);

@@ -14,6 +14,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { InventoryNode } from '../types';
+import { askSmartAssistant } from '../utils/smartAssistant';
 
 interface GeminiAssistantModalProps {
   isOpen: boolean;
@@ -73,50 +74,22 @@ export const GeminiAssistantModal: React.FC<GeminiAssistantModalProps> = ({
     setIsLoading(true);
 
     try {
-      // Build lightweight inventory summary for Gemini context
-      const inventorySummary = nodes.map((n) => ({
-        id: n.id,
-        name: n.name,
-        type: n.type,
-        parentId: n.parentId,
-        tags: n.tags?.map((t) => t.name),
-        quantity: n.quantity,
-        unit: n.unit,
-        expirationDate: n.expirationDate,
-        warrantyExpiry: n.warrantyExpiry,
-        loanStatus: n.loanStatus,
-        description: n.description,
-      }));
-
-      const res = await fetch('/api/gemini/assistant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: q,
-          inventoryData: inventorySummary,
-        }),
-      });
-
-      const data = await res.json();
-      if (data.success && data.answer) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: 'gemini-' + Date.now(),
-            sender: 'gemini',
-            text: data.answer,
-          },
-        ]);
-      } else {
-        throw new Error(data.error || '無法取得回答');
-      }
+      const answer = await askSmartAssistant(q, nodes, []);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: 'gemini-' + Date.now(),
+          sender: 'gemini',
+          text: answer,
+        },
+      ]);
     } catch (err: any) {
       setMessages((prev) => [
         ...prev,
         {
           id: 'error-' + Date.now(),
           sender: 'gemini',
-          text: `抱歉，詢問時遇到問題：${err.message || '請確認網路連線或 API 金鑰設定。'}`,
+          text: `抱歉，詢問時遇到問題：${err.message || '請確認網路連線或稍後再試。'}`,
         },
       ]);
     } finally {

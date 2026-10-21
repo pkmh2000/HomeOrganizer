@@ -1,24 +1,25 @@
-// HomeOrganizer PWA Service Worker
-const CACHE_NAME = 'homeorganizer-cache-v3';
-const OFFLINE_URL = '/index.html';
+// HomeOrganizer PWA Service Worker (Supports GitHub Pages subpaths & custom domains)
+const CACHE_NAME = 'homeorganizer-gh-pages-v4';
 
-const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icon.svg',
-  '/pwa-192x192.png',
-  '/pwa-512x512.png',
-  '/pwa-maskable-512x512.png',
-  '/apple-touch-icon.png',
-  '/favicon.ico',
+const RELATIVE_ASSETS = [
+  './',
+  './index.html',
+  './manifest.json',
+  './icon.svg',
+  './pwa-192x192.png',
+  './pwa-512x512.png',
+  './pwa-maskable-512x512.png',
+  './apple-touch-icon.png',
+  './favicon.ico',
 ];
 
-// Install: precache core shell
+// Install: precache relative to scope
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE).catch((err) => {
+      // Map to full URL under this scope
+      const urlsToCache = RELATIVE_ASSETS.map((p) => new URL(p, self.registration.scope).toString());
+      return cache.addAll(urlsToCache).catch((err) => {
         console.warn('Precaching assets error:', err);
       });
     })
@@ -40,34 +41,41 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: Network-first with cache fallback for navigation, cache-first/stale-while-revalidate for assets
+// Fetch: Stale-While-Revalidate and navigation fallback
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
-  // Skip non-GET requests and Gemini API endpoints
+  // Skip non-GET requests or server API calls
   if (request.method !== 'GET' || request.url.includes('/api/')) {
     return;
   }
 
-  // Navigation requests (HTML pages)
+  // Navigation requests (HTML)
   if (request.mode === 'navigate') {
+    const scopeIndexUrl = new URL('./index.html', self.registration.scope).toString();
+    const scopeRootUrl = self.registration.scope;
+
     event.respondWith(
       fetch(request).catch(() => {
-        return caches.match(OFFLINE_URL) || caches.match('/');
+        return (
+          caches.match(request) ||
+          caches.match(scopeIndexUrl) ||
+          caches.match(scopeRootUrl)
+        );
       })
     );
     return;
   }
 
-  // Static assets: Stale-While-Revalidate
+  // Assets: Stale-While-Revalidate
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
       const fetchPromise = fetch(request)
         .then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
-            const responseToCache = networkResponse.clone();
+            const clone = networkResponse.clone();
             caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseToCache);
+              cache.put(request, clone);
             });
           }
           return networkResponse;
