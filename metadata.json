@@ -1,0 +1,10 @@
+{
+  "name": "HomeOrganizer 家庭智慧生活收納管家",
+  "description": "專為家庭打造的物品拍照收納、層級容器管理、耗材到期追蹤、條碼掃描與家庭行事曆備忘工具。",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

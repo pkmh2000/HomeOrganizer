@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#059669" />
+      <stop offset="50%" stop-color="#0d9488" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+    <linearGradient id="boxGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#f1f5f9" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-opacity="0.25" flood-color="#0f172a" />
+    </filter>
+  </defs>
+
+  <!-- Background with squircle safe-zone padding -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+
+  <!-- Organization Icon Elements (Home + Modular Storage Container + Camera/Tag) -->
+  <g filter="url(#shadow)" transform="translate(64, 56)">
+    <!-- House Roof / Top Arch -->
+    <path d="M192 36 L40 160 L76 160 L76 348 C76 364 88 376 104 376 L280 376 C296 376 308 364 308 348 L308 160 L344 160 Z" fill="url(#boxGrad)" />
+    
+    <!-- Roof Peak Accent -->
+    <path d="M192 48 L64 152 L76 164 L192 70 L308 164 L320 152 Z" fill="#0d9488" />
+
+    <!-- Storage Drawers / Containers -->
+    <!-- Drawer 1 (Top) -->
+    <rect x="112" y="156" width="160" height="50" rx="10" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="2" />
+    <circle cx="192" cy="181" r="7" fill="#0d9488" />
+    <!-- Barcode lines accent inside drawer 1 -->
+    <rect x="132" y="174" width="3" height="14" fill="#94a3b8" />
+    <rect x="138" y="174" width="6" height="14" fill="#94a3b8" />
+    <rect x="147" y="174" width="2" height="14" fill="#94a3b8" />
+    <rect x="237" y="174" width="4" height="14" fill="#94a3b8" />
+    <rect x="244" y="174" width="2" height="14" fill="#94a3b8" />
+
+    <!-- Drawer 2 (Middle) -->
+    <rect x="112" y="222" width="160" height="50" rx="10" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="2" />
+    <circle cx="192" cy="247" r="7" fill="#0284c7" />
+    <rect x="134" y="240" width="18" height="14" rx="3" fill="#38bdf8" opacity="0.6" />
+
+    <!-- Drawer 3 (Bottom) -->
+    <rect x="112" y="288" width="160" height="50" rx="10" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="2" />
+    <circle cx="192" cy="313" r="7" fill="#10b981" />
+
+    <!-- Camera badge overlay at bottom right -->
+    <circle cx="280" cy="328" r="38" fill="#f59e0b" stroke="#ffffff" stroke-width="5" />
+    <!-- Camera icon inside badge -->
+    <path d="M266 322 L271 316 L289 316 L294 322 L300 322 C302.2 322 304 323.8 304 326 L304 338 C304 340.2 302.2 342 300 342 L260 342 C257.8 342 256 340.2 256 338 L256 326 C256 323.8 257.8 322 260 322 Z" fill="#ffffff" />
+    <circle cx="280" cy="331" r="5" fill="#f59e0b" />
+  </g>
+</svg>
