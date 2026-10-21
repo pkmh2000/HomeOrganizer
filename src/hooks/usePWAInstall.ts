@@ -11,9 +11,7 @@ export interface PWAInstallState {
   isIOS: boolean;         // iPhone, iPad, iPod
   isAndroid: boolean;     // Android device
   isInAppBrowser: boolean;// LINE, Facebook, WeChat, Instagram, etc.
-  isLine: boolean;        // Specifically LINE
   isMobile: boolean;      // Any mobile device
-  openInExternalBrowserUrl: string; // URL with openExternalBrowser=1 for LINE breakout
   install: () => Promise<'accepted' | 'dismissed' | 'manual_guide'>;
 }
 
@@ -23,7 +21,6 @@ export function usePWAInstall(): PWAInstallState {
   const [isIOS, setIsIOS] = useState(false);
   const [isAndroid, setIsAndroid] = useState(false);
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
-  const [isLine, setIsLine] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -37,14 +34,13 @@ export function usePWAInstall(): PWAInstallState {
     const ua = (window.navigator.userAgent || '').toLowerCase();
     const isIOSDevice = /iphone|ipad|ipod/.test(ua);
     const isAndroidDevice = /android/.test(ua);
-    const isLineApp = /line\//.test(ua);
-    const inApp = isLineApp || /fban|fbav|messenger|instagram|micromessenger|wechat/.test(ua);
+    const isMobileDevice = isIOSDevice || isAndroidDevice || /mobile|tablet/.test(ua);
+    const inApp = /line\/|fban|fbav|messenger|instagram|micromessenger|wechat/.test(ua);
 
     setIsIOS(isIOSDevice);
     setIsAndroid(isAndroidDevice);
     setIsMobile(isMobileDevice);
     setIsInAppBrowser(inApp);
-    setIsLine(isLineApp);
 
     // 3. Listen for Chrome / Android beforeinstallprompt
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -86,20 +82,13 @@ export function usePWAInstall(): PWAInstallState {
     return 'manual_guide';
   }, [deferredPrompt]);
 
-  const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-  const openInExternalBrowserUrl = currentUrl.includes('openExternalBrowser=1')
-    ? currentUrl
-    : currentUrl + (currentUrl.includes('?') ? '&' : '?') + 'openExternalBrowser=1';
-
   return {
     isInstallable: !!deferredPrompt,
     isInstalled,
     isIOS,
     isAndroid,
     isInAppBrowser,
-    isLine,
     isMobile,
-    openInExternalBrowserUrl,
     install,
   };
 }
