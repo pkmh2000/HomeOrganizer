@@ -17,10 +17,18 @@ export interface LoanStatus {
 
 export interface InventoryNode {
   id: string;
-  parentId: string | null; // null for top-level root containers/rooms
+  parentId: string | null; // null for top-level root containers/rooms; or specific container id
   type: NodeType;          // 'container' or 'item'
   name: string;
   isPrivate: boolean;      // true = 個人私人, false = 家庭共有
+  isArchived?: boolean;    // true = 已編輯歸檔, false/undefined = 置於未歸檔區 (Inbox)
+
+  // Ownership, Spaces & Permissions (模擬轉移、共有、私有、密碼與私鑰)
+  ownerName?: string;      // 擁有者 (例: 爸爸, 媽媽, 大寶, 經理, Alice)
+  spaceId?: string;        // 所屬空間 (例: space-home, space-office)
+  accessKey?: string;      // 容器專屬私鑰 (6位數密碼或金鑰)
+  accessKeyExpiry?: string;// 私鑰到期時間 ('unlimited' 或 ISO 日期時間字串)
+  sharedWith?: string[];   // 開放可共同編輯的成員名單 (例: ['媽媽', 'Alice'])
 
   // Photos
   photos: string[];        // Array of data URLs or URLs. First is main photo.
@@ -70,6 +78,46 @@ export interface FamilyMemo {
   createdAt: string;
 }
 
+export interface StorageSpace {
+  id: string;
+  name: string;
+  type: 'home' | 'office' | 'villa' | 'warehouse' | 'other';
+  icon: string;
+  description?: string;
+  createdAt: string;
+}
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  avatar: string;
+  role: 'admin' | 'member' | 'guest';
+  pinCode?: string; // 4~6位數密碼或安全PIN
+}
+
+export interface GalleryPhoto {
+  id: string;
+  dataUrl: string;
+  title: string;
+  createdAt: string;
+  nodeId?: string;
+  nodeName?: string;
+  tags?: string[];
+  isPrivate?: boolean;
+  ownerName?: string;
+}
+
+export interface LocalSnapshot {
+  id: string;
+  name: string;
+  createdAt: string;
+  nodeCount: number;
+  memoCount: number;
+  data: HouseholdData;
+}
+
+export type ExportDestination = 'local_snapshot' | 'download_json' | 'clipboard_code';
+
 export interface HouseholdData {
   version: string;
   householdName: string;
@@ -77,14 +125,17 @@ export interface HouseholdData {
   nodes: InventoryNode[];
   memos: FamilyMemo[];
   members: string[];
+  spaces?: StorageSpace[];
+  activeSpaceId?: string;
 }
 
-export type ViewTab = 'dashboard' | 'containers' | 'tree' | 'calendar' | 'memos' | 'settings';
+export type ViewTab = 'dashboard' | 'containers' | 'tree' | 'calendar' | 'memos' | 'gallery' | 'spaces' | 'settings';
 
 export interface FilterOptions {
   searchQuery: string;
   tagId?: string;
   onlyPrivate?: boolean;
   onlyShared?: boolean;
+  onlyUnfiled?: boolean;
   statusFilter?: 'all' | 'expiring_soon' | 'expired' | 'low_stock' | 'loaned' | 'warranty_soon';
 }

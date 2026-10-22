@@ -13,6 +13,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { InventoryNode, NodeType } from '../types';
+import { saveGalleryPhoto } from '../utils/storage';
 
 interface BatchPhotoIntakeModalProps {
   isOpen: boolean;
@@ -148,12 +149,27 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
     }
 
     const now = new Date().toISOString();
+
+    // Also persist photos into photo gallery library for future reuse
+    draftCards.forEach((draft) => {
+      if (draft.photoUrl) {
+        saveGalleryPhoto({
+          id: 'gal-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+          dataUrl: draft.photoUrl,
+          title: draft.name || '相機拍照照片',
+          createdAt: now,
+          isPrivate: draft.isPrivate,
+        });
+      }
+    });
+
     const createdNodes: InventoryNode[] = draftCards.map((draft, idx) => ({
       id: 'node-' + Date.now() + '-' + idx + '-' + Math.random().toString(36).substring(2, 7),
       parentId: currentContainerId,
       type: draft.type,
       name: draft.name.trim() || (draft.type === 'container' ? '未命名收納盒' : '未命名物品'),
       isPrivate: draft.isPrivate,
+      isArchived: currentContainerId !== null, // If added in root without container, placed in Unfiled Inbox!
       photos: [draft.photoUrl],
       quantity: draft.quantity || 1,
       unit: draft.type === 'container' ? '個' : '件',

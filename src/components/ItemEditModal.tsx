@@ -12,6 +12,7 @@ import {
   Tag as TagIcon,
   Check,
   Lock,
+  Unlock,
   Layers,
   Box,
   Users,
@@ -20,11 +21,18 @@ import {
   FileText,
   Clock,
   Sparkles,
+  Image as ImageIcon,
+  Key,
+  Inbox,
+  Archive,
+  Shield,
+  FolderInput,
 } from 'lucide-react';
 import { InventoryNode, Tag, NodeType, LoanStatus } from '../types';
-import { TAG_PALETTE } from '../utils/storage';
+import { TAG_PALETTE, DEFAULT_MEMBERS } from '../utils/storage';
 import { generateQRCodeDataURL } from '../utils/qr';
 import { BarcodeScannerModal } from './BarcodeScannerModal';
+import { PhotoGalleryModal } from './PhotoGalleryModal';
 
 interface ItemEditModalProps {
   isOpen: boolean;
@@ -54,6 +62,7 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
   const [customTagInput, setCustomTagInput] = useState('');
   const [customTagColor, setCustomTagColor] = useState('#0d9488');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isGalleryPickerOpen, setIsGalleryPickerOpen] = useState(false);
 
   const handleAnalyzeWithGemini = async () => {
     const photo = formData.photos && formData.photos[0];
@@ -234,10 +243,16 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
     e.preventDefault();
     const finalNode: InventoryNode = {
       id: formData.id || 'node-' + Date.now(),
-      parentId: formData.parentId !== undefined ? formData.parentId : currentContainerId,
+      parentId: formData.parentId === 'unfiled' ? null : (formData.parentId !== undefined ? formData.parentId : currentContainerId),
       type: formData.type || 'item',
       name: formData.name?.trim() || (formData.type === 'container' ? '未命名容器' : '未命名物品'),
       isPrivate: Boolean(formData.isPrivate),
+      isArchived: formData.parentId === 'unfiled' ? false : (formData.isArchived !== undefined ? formData.isArchived : true),
+      ownerName: formData.ownerName || undefined,
+      spaceId: formData.spaceId || undefined,
+      accessKey: formData.accessKey?.trim() || undefined,
+      accessKeyExpiry: formData.accessKeyExpiry || undefined,
+      sharedWith: formData.sharedWith || undefined,
       photos: formData.photos || [],
       receiptPhotos: formData.receiptPhotos || [],
       quantity: Math.max(0, Number(formData.quantity) || 1),
@@ -409,13 +424,23 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
                     <Camera className="w-4 h-4 text-teal-400" />
                     <span>物品照片 (第一張為主封面照，可上傳多張)</span>
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => photoInputRef.current?.click()}
-                    className="text-xs text-teal-400 hover:text-teal-300 font-semibold flex items-center gap-1"
-                  >
-                    <Upload className="w-3.5 h-3.5" /> + 新增照片
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsGalleryPickerOpen(true)}
+                      className="text-xs text-amber-300 hover:text-amber-200 font-semibold flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-500/15 border border-amber-500/30 transition"
+                    >
+                      <ImageIcon className="w-3.5 h-3.5" />
+                      <span>從圖庫調用</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => photoInputRef.current?.click()}
+                      className="text-xs text-teal-400 hover:text-teal-300 font-semibold flex items-center gap-1"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> + 新增照片
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex gap-2.5 overflow-x-auto pb-2 no-scrollbar">
@@ -523,6 +548,139 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
                     className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-teal-500"
                   />
                 </div>
+              </div>
+
+              {/* Container Placement & Archiving Status */}
+              <div className="space-y-2 p-3.5 rounded-2xl bg-slate-900 border border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <FolderInput className="w-4 h-4 text-teal-400" />
+                    <span>歸檔目的地 / 存放容器</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-amber-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.parentId === 'unfiled' || formData.isArchived === false}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setFormData({ ...formData, parentId: 'unfiled', isArchived: false });
+                        } else {
+                          setFormData({ ...formData, parentId: currentContainerId, isArchived: true });
+                        }
+                      }}
+                      className="rounded border-slate-700 text-amber-500 focus:ring-0"
+                    />
+                    <Inbox className="w-3.5 h-3.5 text-amber-400" />
+                    <span>置於未歸檔區 (Inbox 稍後整理)</span>
+                  </label>
+                </div>
+
+                <select
+                  value={formData.parentId === 'unfiled' ? 'unfiled' : (formData.parentId || '')}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === 'unfiled') {
+                      setFormData({ ...formData, parentId: 'unfiled', isArchived: false });
+                    } else if (val === '') {
+                      setFormData({ ...formData, parentId: null, isArchived: true });
+                    } else {
+                      setFormData({ ...formData, parentId: val, isArchived: true });
+                    }
+                  }}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-none focus:border-teal-500 font-medium"
+                >
+                  <option value="unfiled">📥 暫置於未歸檔區 (待後續分類整理)</option>
+                  <option value="">🏠 全家總覽空間 (最頂層根空間)</option>
+                  {allNodes
+                    .filter((n) => n.type === 'container' && n.id !== formData.id)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        📦 {c.name}
+                      </option>
+                    ))}
+                </select>
+                <p className="text-[11px] text-slate-500">
+                  {formData.parentId === 'unfiled' || formData.isArchived === false
+                    ? '⚠️ 目前為未歸檔狀態，將顯示在「未歸檔收納盒」中提醒您抽空分類。'
+                    : '✓ 已指定收納容器，完成歸檔。'}
+                </p>
+              </div>
+
+              {/* Ownership & Private Access Key */}
+              <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-teal-400" />
+                      <span>物件歸屬 / 擁有人</span>
+                    </label>
+                    <select
+                      value={formData.ownerName || '全家'}
+                      onChange={(e) => setFormData({ ...formData, ownerName: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-none focus:border-teal-500"
+                    >
+                      {DEFAULT_MEMBERS.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 text-rose-400" />
+                      <span>私有隱私狀態</span>
+                    </label>
+                    <div className="flex items-center h-9">
+                      <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(formData.isPrivate)}
+                          onChange={(e) => setFormData({ ...formData, isPrivate: e.target.checked })}
+                          className="w-4 h-4 rounded border-slate-700 text-rose-500 focus:ring-0"
+                        />
+                        <Lock className="w-3.5 h-3.5 text-rose-400" />
+                        <span>設為個人私有 (僅擁有人可見)</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* If container and marked as private: offer Access Key (私鑰) and Expiry */}
+                {formData.type === 'container' && formData.isPrivate && (
+                  <div className="pt-2.5 border-t border-slate-800 space-y-2">
+                    <div className="flex items-center gap-2 text-xs font-bold text-teal-400">
+                      <Key className="w-3.5 h-3.5" />
+                      <span>私有容器專屬私鑰 (授權他人限時存取)</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={formData.accessKey || ''}
+                        onChange={(e) => setFormData({ ...formData, accessKey: e.target.value })}
+                        placeholder="6位數私鑰 (例: 888888)"
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-none focus:border-teal-500 font-mono"
+                      />
+                      <select
+                        value={formData.accessKeyExpiry || 'unlimited'}
+                        onChange={(e) => setFormData({ ...formData, accessKeyExpiry: e.target.value })}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-none focus:border-teal-500"
+                      >
+                        <option value="unlimited">⏳ 私鑰有效期限：永久有效</option>
+                        <option value={new Date(Date.now() + 24 * 3600 * 1000).toISOString()}>
+                          ⏳ 24 小時後到期
+                        </option>
+                        <option value={new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()}>
+                          ⏳ 7 天後到期
+                        </option>
+                        <option value={new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString()}>
+                          ⏳ 30 天後到期
+                        </option>
+                      </select>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Low Stock Threshold */}
@@ -1014,6 +1172,20 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
         }}
         title="掃描條碼填入"
         subtitle="將包裝條碼置於框中自動填入"
+      />
+
+      {/* Embedded Photo Gallery Picker */}
+      <PhotoGalleryModal
+        isOpen={isGalleryPickerOpen}
+        onClose={() => setIsGalleryPickerOpen(false)}
+        nodes={allNodes}
+        mode="pick"
+        onSelectPhoto={(photoUrl) => {
+          setFormData((prev) => ({
+            ...prev,
+            photos: [...(prev.photos || []), photoUrl],
+          }));
+        }}
       />
     </div>
   );

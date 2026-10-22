@@ -115,8 +115,8 @@ export const FamilyMemosView: React.FC<FamilyMemosViewProps> = ({
         ))}
       </div>
 
-      {/* Memos List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      {/* Memos List: pb-36 ensures bottom memo is never obstructed */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-36">
         {filteredMemos.length === 0 ? (
           <div className="py-16 text-center text-slate-500">
             <CheckCircle2 className="w-12 h-12 mx-auto stroke-[1.5] opacity-40 mb-2" />

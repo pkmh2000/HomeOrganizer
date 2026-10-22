@@ -178,8 +178,8 @@ export const HierarchyTreeView: React.FC<HierarchyTreeViewProps> = ({
         </div>
       </div>
 
-      {/* Tree Content */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-1">
+      {/* Tree Content: pb-36 ensures bottom nodes are never obstructed */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-1 pb-36">
         {rootNodes.map((rootNode) => renderBranch(rootNode, 0))}
       </div>
     </div>

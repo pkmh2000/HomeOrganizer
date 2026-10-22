@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ViewTab, InventoryNode, FamilyMemo } from './types';
+import { ViewTab, InventoryNode, FamilyMemo, UserProfile, StorageSpace } from './types';
 import {
   loadNodes,
   saveNodes,
@@ -10,7 +10,14 @@ import {
   loadHouseholdName,
   saveHouseholdName,
   getExpirationStatus,
+  loadActiveUser,
+  saveActiveUser,
+  loadActiveSpaceId,
+  saveActiveSpaceId,
+  loadSpaces,
+  isNodeUnfiled,
 } from './utils/storage';
+import { useUndoHistory } from './hooks/useUndoHistory';
 import { Navbar } from './components/Navbar';
 import { BottomNav } from './components/BottomNav';
 import { Dashboard } from './components/Dashboard';
@@ -27,8 +34,21 @@ import { PrintableLabelModal } from './components/PrintableLabelModal';
 import { SuggestionsModal } from './components/SuggestionsModal';
 import { GeminiAssistantModal } from './components/GeminiAssistantModal';
 import { MobileInstallBanner } from './components/MobileInstallBanner';
+import { PhotoGalleryModal } from './components/PhotoGalleryModal';
+import { AccountSpaceModal } from './components/AccountSpaceModal';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
-import { WifiOff, Camera, Plus, PanelBottomOpen, Layers } from 'lucide-react';
+import {
+  WifiOff,
+  Camera,
+  Plus,
+  PanelBottomOpen,
+  Layers,
+  RotateCcw,
+  Eye,
+  Inbox,
+  Check,
+  X,
+} from 'lucide-react';
 
 export default function App() {
   const isOnline = useOnlineStatus();
@@ -39,20 +59,38 @@ export default function App() {
   const [members, setMembers] = useState<string[]>(() => loadMembers());
   const [householdName, setHouseholdName] = useState<string>(() => loadHouseholdName());
 
+  // User Accounts & Multi-Spaces State
+  const [activeUser, setActiveUser] = useState<UserProfile>(() => loadActiveUser());
+  const [activeSpaceId, setActiveSpaceId] = useState<string>(() => loadActiveSpaceId());
+  const [spaces, setSpaces] = useState<StorageSpace[]>(() => loadSpaces());
+  const [unlockedContainerIds, setUnlockedContainerIds] = useState<Set<string>>(new Set());
+
+  // Undo / Redo History Stack (at least 5 steps, supported up to 20 steps)
+  const {
+    canUndo,
+    canRedo,
+    undoCount,
+    toastMessage,
+    recordHistory,
+    undo,
+    dismissToast,
+  } = useUndoHistory(20);
+
   // UI Navigation State
   const [activeTab, setActiveTab] = useState<ViewTab>('dashboard');
   const [currentContainerId, setCurrentContainerId] = useState<string | null>(null);
   const [showPrivate, setShowPrivate] = useState<boolean>(true);
 
-  // Bottom Desk Toggle: Defaults to false so screen real estate is 100% maximized!
-  // User requirement: "進入每一個功能 無用的 desk 可以收起 盡量可以操作當下功能"
+  // Pure View Mode: Hides floating desk & camera buttons so view area is 100% unobstructed!
+  const [pureViewMode, setPureViewMode] = useState<boolean>(false);
+
+  // Bottom Desk Toggle
   const [showBottomDesk, setShowBottomDesk] = useState<boolean>(false);
 
   const toggleBottomDesk = () => {
     setShowBottomDesk((prev) => !prev);
   };
 
-  // When changing tab, auto-collapse desk so the target function is fully operable
   const handleTabChange = (tab: ViewTab) => {
     setActiveTab(tab);
     setShowBottomDesk(false); // auto-collapse!
@@ -68,6 +106,8 @@ export default function App() {
   const [printNode, setPrintNode] = useState<InventoryNode | null>(null);
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
   const [isGeminiOpen, setIsGeminiOpen] = useState(false);
+  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [isAccountSpaceModalOpen, setIsAccountSpaceModalOpen] = useState(false);
 
   // Sync to local storage
   useEffect(() => {
@@ -86,11 +126,40 @@ export default function App() {
     saveHouseholdName(householdName);
   }, [householdName]);
 
-  // Filter nodes according to privacy toggle
+  // Privacy & Space Filter:
+  // "照片與物件/容器私有同步, 設為私有, 只有擁有人才能看到"
   const visibleNodes = useMemo(() => {
-    if (showPrivate) return nodes;
-    return nodes.filter((n) => !n.isPrivate);
-  }, [nodes, showPrivate]);
+    let result = nodes;
+
+    // 1. If global private toggle is off, hide all private nodes
+    if (!showPrivate) {
+      result = result.filter((n) => !n.isPrivate);
+    } else if (activeUser.role !== 'admin' && activeUser.name !== '全家 / 公共視角') {
+      // 2. Member level privacy: if private and owned by another user, hide unless unlocked with private key
+      result = result.filter((n) => {
+        if (!n.isPrivate) return true;
+        if (!n.ownerName || n.ownerName === activeUser.name || n.ownerName === '全家') return true;
+        if (unlockedContainerIds.has(n.id)) return true;
+        return false;
+      });
+    }
+
+    // 3. Space filter (if container/node belongs to a specific space)
+    if (activeSpaceId) {
+      result = result.filter((n) => !n.spaceId || n.spaceId === activeSpaceId);
+    }
+
+    return result;
+  }, [nodes, showPrivate, activeUser, unlockedContainerIds, activeSpaceId]);
+
+  // Unfiled nodes count
+  const unfiledCount = useMemo(() => {
+    return nodes.filter(isNodeUnfiled).length;
+  }, [nodes]);
+
+  // Active Space Name
+  const activeSpaceObj = spaces.find((s) => s.id === activeSpaceId);
+  const activeSpaceName = activeSpaceObj ? `${activeSpaceObj.icon} ${activeSpaceObj.name}` : householdName;
 
   // Current Container Name & Back Navigation
   const currentContainerName = useMemo(() => {
@@ -114,8 +183,17 @@ export default function App() {
     }).length;
   }, [nodes]);
 
+  // Undo Handler
+  const handleUndo = () => {
+    const restored = undo(nodes);
+    if (restored) {
+      setNodes(restored);
+    }
+  };
+
   // Save new batch photos into current container
   const handleSaveBatchNodes = (newNodes: InventoryNode[]) => {
+    recordHistory(nodes, `批次新增 ${newNodes.length} 張照片物件`);
     setNodes((prev) => [...prev, ...newNodes]);
     setActiveTab('containers');
     setShowBottomDesk(false);
@@ -123,6 +201,7 @@ export default function App() {
 
   // Save or update an item/container
   const handleSaveNode = (savedNode: InventoryNode) => {
+    recordHistory(nodes, `更新「${savedNode.name}」`);
     setNodes((prev) => {
       const idx = prev.findIndex((n) => n.id === savedNode.id);
       if (idx >= 0) {
@@ -135,8 +214,10 @@ export default function App() {
     });
   };
 
-  // Delete node and its subtree
+  // Single delete node and its subtree
   const handleDeleteNode = (nodeId: string) => {
+    const targetNode = nodes.find((n) => n.id === nodeId);
+    recordHistory(nodes, `刪除「${targetNode?.name || '物品/容器'}」`);
     setNodes((prev) => {
       const idsToDelete = new Set<string>([nodeId]);
       const findDescendants = (parentId: string) => {
@@ -154,8 +235,91 @@ export default function App() {
     });
   };
 
+  // Batch delete nodes
+  const handleBatchDelete = (nodeIds: string[]) => {
+    recordHistory(nodes, `批次刪除 ${nodeIds.length} 項物件與容器`);
+    const idSet = new Set(nodeIds);
+    setNodes((prev) => prev.filter((n) => !idSet.has(n.id)));
+  };
+
+  // Batch move nodes to target container
+  const handleBatchMove = (nodeIds: string[], targetParentId: string | null) => {
+    recordHistory(nodes, `批次移動 ${nodeIds.length} 項至目的地`);
+    const idSet = new Set(nodeIds);
+    setNodes((prev) =>
+      prev.map((n) =>
+        idSet.has(n.id)
+          ? {
+              ...n,
+              parentId: targetParentId,
+              isArchived: true,
+              updatedAt: new Date().toISOString(),
+            }
+          : n
+      )
+    );
+  };
+
+  // Batch toggle private/shared
+  const handleBatchTogglePrivate = (nodeIds: string[]) => {
+    recordHistory(nodes, `批次切換 ${nodeIds.length} 項隱私狀態`);
+    const idSet = new Set(nodeIds);
+    setNodes((prev) =>
+      prev.map((n) =>
+        idSet.has(n.id)
+          ? {
+              ...n,
+              isPrivate: !n.isPrivate,
+              updatedAt: new Date().toISOString(),
+            }
+          : n
+      )
+    );
+  };
+
+  // Batch archive
+  const handleBatchArchive = (nodeIds: string[]) => {
+    recordHistory(nodes, `批次歸檔 ${nodeIds.length} 項物品`);
+    const idSet = new Set(nodeIds);
+    setNodes((prev) =>
+      prev.map((n) =>
+        idSet.has(n.id)
+          ? {
+              ...n,
+              isArchived: true,
+              updatedAt: new Date().toISOString(),
+            }
+          : n
+      )
+    );
+  };
+
+  // Quick single item archive
+  const handleQuickArchiveItem = (itemId: string, targetParentId: string) => {
+    const item = nodes.find((n) => n.id === itemId);
+    recordHistory(nodes, `歸檔「${item?.name || '物品'}」`);
+    setNodes((prev) =>
+      prev.map((n) =>
+        n.id === itemId
+          ? {
+              ...n,
+              parentId: targetParentId,
+              isArchived: true,
+              updatedAt: new Date().toISOString(),
+            }
+          : n
+      )
+    );
+  };
+
+  // Unlock private container with key
+  const handleUnlockContainer = (containerId: string) => {
+    setUnlockedContainerIds((prev) => new Set([...prev, containerId]));
+  };
+
   // Fast toggle between container and item
   const handleToggleNodeType = (targetNode: InventoryNode) => {
+    recordHistory(nodes, `轉換「${targetNode.name}」類型`);
     const newType = targetNode.type === 'container' ? 'item' : 'container';
     setNodes((prev) =>
       prev.map((n) =>
@@ -188,6 +352,7 @@ export default function App() {
         quantity: 1,
         unit: '個',
         isPrivate: false,
+        isArchived: currentContainerId !== null,
         photos: [],
         tags: [{ id: 't-scan', name: '掃碼建檔', color: '#0d9488' }],
       };
@@ -221,6 +386,7 @@ export default function App() {
 
   // Restore imported data
   const handleRestoreData = (newNodes: InventoryNode[], newMemos: FamilyMemo[]) => {
+    recordHistory(nodes, '還原歷史資料備份');
     setNodes(newNodes);
     setMemos(newMemos);
   };
@@ -252,6 +418,16 @@ export default function App() {
         currentContainerName={currentContainerName}
         currentContainerId={currentContainerId}
         onBackContainer={handleBackContainer}
+        onUndo={handleUndo}
+        canUndo={canUndo}
+        undoCount={undoCount}
+        onOpenGallery={() => setIsGalleryOpen(true)}
+        onOpenAccountSpace={() => setIsAccountSpaceModalOpen(true)}
+        activeUser={activeUser}
+        activeSpaceName={activeSpaceName}
+        pureViewMode={pureViewMode}
+        onTogglePureViewMode={() => setPureViewMode((p) => !p)}
+        unfiledCount={unfiledCount}
       />
 
       {/* Mobile PWA Install Reminder Banner (prompts when on mobile and not installed) */}
@@ -302,6 +478,11 @@ export default function App() {
               setPrintNode(container);
               setIsPrintModalOpen(true);
             }}
+            onBatchDelete={handleBatchDelete}
+            onBatchMove={handleBatchMove}
+            onBatchTogglePrivate={handleBatchTogglePrivate}
+            onBatchArchive={handleBatchArchive}
+            onQuickArchiveItem={handleQuickArchiveItem}
           />
         )}
 
@@ -357,14 +538,14 @@ export default function App() {
           />
         )}
 
-        {/* Floating Controls when bottom desk is closed (User request: 無用的 desk 平時收起，需要才開啟) */}
-        {!showBottomDesk && (
-          <div className="fixed bottom-5 inset-x-0 z-30 flex items-center justify-between px-4 pointer-events-none">
+        {/* Floating Controls when bottom desk is closed (User request: 無用的 desk 平時收起；需要時可隱藏避開最後一項) */}
+        {!showBottomDesk && !pureViewMode && (
+          <div className="fixed bottom-5 inset-x-0 z-30 flex items-center justify-between px-4 pointer-events-none animate-fade-in">
             {/* Left: Open Desk Toggle Pill */}
             <button
               onClick={() => setShowBottomDesk(true)}
               title="開啟功能導航工作盤"
-              className="pointer-events-auto h-11 px-3.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-teal-400 font-bold text-xs flex items-center gap-1.5 shadow-xl border border-slate-700/80 active:scale-95 transition backdrop-blur-md"
+              className="pointer-events-auto h-11 px-3.5 rounded-full bg-slate-900/95 hover:bg-slate-800 text-teal-400 font-bold text-xs flex items-center gap-1.5 shadow-xl border border-slate-700/80 active:scale-95 transition backdrop-blur-md"
             >
               <PanelBottomOpen className="w-4 h-4" />
               <span>工作盤</span>
@@ -384,9 +565,43 @@ export default function App() {
             </button>
           </div>
         )}
+
+        {/* Pure View Mode Quick Restore Pill (when pureViewMode is active) */}
+        {pureViewMode && (
+          <button
+            onClick={() => setPureViewMode(false)}
+            title="退出純淨全螢幕檢視，還原工作盤與拍照快捷鈕"
+            className="fixed bottom-4 right-4 z-30 px-3 py-1.5 rounded-full bg-slate-900/90 border border-teal-500/40 text-teal-300 hover:text-white font-semibold text-xs shadow-xl flex items-center gap-1.5 backdrop-blur-md transition active:scale-95"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            <span>退出純淨模式</span>
+          </button>
+        )}
       </main>
 
-      {/* Android Mobile Bottom Navigation Desk (Only visible when requested, auto-collapses on tab click) */}
+      {/* Floating Undo Toast Notification (避免誤刪，隨時可一鍵復原) */}
+      {toastMessage && (
+        <div className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 border border-teal-500/70 text-slate-100 text-xs px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-3 backdrop-blur-md animate-fade-in max-w-sm w-full mx-auto">
+          <span className="truncate flex-1 font-medium">{toastMessage}</span>
+          {canUndo && (
+            <button
+              onClick={handleUndo}
+              className="px-2.5 py-1 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs transition active:scale-95 shadow shrink-0 flex items-center gap-1"
+            >
+              <RotateCcw className="w-3 h-3 stroke-[3]" />
+              <span>復原</span>
+            </button>
+          )}
+          <button
+            onClick={dismissToast}
+            className="text-slate-400 hover:text-white p-1 shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Mobile Bottom Navigation Desk */}
       {showBottomDesk && (
         <BottomNav
           activeTab={activeTab}
@@ -482,6 +697,32 @@ export default function App() {
           setCurrentContainerId(cid);
           handleTabChange('containers');
         }}
+      />
+
+      {/* 8. Dedicated Photo Gallery Modal */}
+      <PhotoGalleryModal
+        isOpen={isGalleryOpen}
+        onClose={() => setIsGalleryOpen(false)}
+        nodes={nodes}
+      />
+
+      {/* 9. Accounts, Passwords & Multiple Spaces Modal */}
+      <AccountSpaceModal
+        isOpen={isAccountSpaceModalOpen}
+        onClose={() => setIsAccountSpaceModalOpen(false)}
+        nodes={nodes}
+        activeUser={activeUser}
+        onChangeActiveUser={(u) => {
+          setActiveUser(u);
+          saveActiveUser(u);
+        }}
+        activeSpaceId={activeSpaceId}
+        onChangeActiveSpace={(sId) => {
+          setActiveSpaceId(sId);
+          saveActiveSpaceId(sId);
+        }}
+        unlockedContainerIds={unlockedContainerIds}
+        onUnlockContainer={handleUnlockContainer}
       />
     </div>
   );

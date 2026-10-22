@@ -401,7 +401,7 @@ export const FamilyCalendarView: React.FC<FamilyCalendarViewProps> = ({
 
       {/* VIEW 1: CONTINUOUS MULTI-MONTH STREAM (User request: 不只顯示選中的月份，連續滾動所有月份!) */}
       {viewMode === 'continuous_feed' && (
-        <div className="flex-1 overflow-y-auto p-3.5 space-y-6">
+        <div className="flex-1 overflow-y-auto p-3.5 space-y-6 pb-36">
           {monthlyGroups.length === 0 ? (
             <div className="py-16 text-center text-slate-500">
               <CalendarIcon className="w-12 h-12 mx-auto stroke-[1.5] opacity-40 mb-2" />

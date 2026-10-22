@@ -37,6 +37,7 @@ export function usePWAInstall(): PWAInstallState {
     const ua = (window.navigator.userAgent || '').toLowerCase();
     const isIOSDevice = /iphone|ipad|ipod/.test(ua);
     const isAndroidDevice = /android/.test(ua);
+    const isMobileDevice = isIOSDevice || isAndroidDevice || /mobile|tablet/.test(ua);
     const isLineApp = /line\//.test(ua);
     const inApp = isLineApp || /fban|fbav|messenger|instagram|micromessenger|wechat/.test(ua);
 

@@ -116,7 +116,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const pendingMemos = memos.filter((m) => !m.isDone);
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-5 bg-slate-950 pb-24">
+    <div className="flex-1 overflow-y-auto p-4 space-y-5 bg-slate-950 pb-36">
       {/* Welcome Card & Fast Action Bar */}
       <div className="p-4 rounded-3xl bg-gradient-to-br from-teal-900/60 via-slate-900 to-slate-900 border border-teal-500/30 shadow-xl">
         <div className="flex items-center justify-between mb-3">

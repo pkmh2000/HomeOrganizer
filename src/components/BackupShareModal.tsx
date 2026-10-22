@@ -16,8 +16,14 @@ import {
   WifiOff,
   RefreshCw,
   Cpu,
+  Bookmark,
+  Trash2,
+  HardDrive,
+  FileCode,
+  ArrowRight,
+  Plus,
 } from 'lucide-react';
-import { InventoryNode, FamilyMemo, HouseholdData } from '../types';
+import { InventoryNode, FamilyMemo, HouseholdData, LocalSnapshot, ExportDestination } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
 import {
   exportFullHousehold,
@@ -26,6 +32,11 @@ import {
   saveMemos,
   INITIAL_SAMPLE_NODES,
   INITIAL_SAMPLE_MEMOS,
+  loadSnapshots,
+  saveSnapshot,
+  deleteSnapshot,
+  loadExportDestination,
+  saveExportDestination,
 } from '../utils/storage';
 
 interface BackupShareModalProps {
@@ -51,12 +62,28 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
   const [dataCopied, setDataCopied] = useState(false);
   const [selectedExportContainerId, setSelectedExportContainerId] = useState<string>('');
   const [importStatus, setImportStatus] = useState<string | null>(null);
-  const [cloudSynced, setCloudSynced] = useState(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<string | null>(null);
 
+  // Default export destination preference
+  const [exportDest, setExportDest] = useState<ExportDestination>(() => loadExportDestination());
+
+  // Local Snapshots
+  const [snapshots, setSnapshots] = useState<LocalSnapshot[]>(() => loadSnapshots());
+  const [newSnapshotName, setNewSnapshotName] = useState('');
+  const [isCreatingSnapshot, setIsCreatingSnapshot] = useState(false);
+
+  // Paste code restore
+  const [isPasteOpen, setIsPasteOpen] = useState(false);
+  const [pastedJson, setPastedJson] = useState('');
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const containerNodes = nodes.filter((n) => n.type === 'container');
+
+  const handleDestinationChange = (dest: ExportDestination) => {
+    setExportDest(dest);
+    saveExportDestination(dest);
+  };
 
   // Full export
   const handleExportFull = () => {
@@ -86,6 +113,42 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
     URL.revokeObjectURL(url);
   };
 
+  // Create new local snapshot
+  const handleCreateSnapshot = (e: React.FormEvent) => {
+    e.preventDefault();
+    const data: HouseholdData = {
+      version: '2.0',
+      householdName,
+      exportedAt: new Date().toISOString(),
+      nodes,
+      memos,
+      members,
+    };
+    saveSnapshot(newSnapshotName, data);
+    setSnapshots(loadSnapshots());
+    setNewSnapshotName('');
+    setIsCreatingSnapshot(false);
+    setImportStatus('已成功建立本機版本快照！');
+  };
+
+  // Restore from snapshot
+  const handleRestoreSnapshot = (snap: LocalSnapshot) => {
+    if (confirm(`確定要還原至快照「${snap.name}」嗎？（共 ${snap.nodeCount} 個物件）`)) {
+      onRestoreData(snap.data.nodes, snap.data.memos);
+      if (snap.data.householdName) {
+        onUpdateHouseholdName(snap.data.householdName);
+      }
+      setImportStatus(`已成功還原快照「${snap.name}」！`);
+    }
+  };
+
+  const handleDeleteSnapshot = (id: string, name: string) => {
+    if (confirm(`確定要刪除快照「${name}」嗎？`)) {
+      deleteSnapshot(id);
+      setSnapshots(loadSnapshots());
+    }
+  };
+
   // Import JSON file
   const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -95,27 +158,7 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
     reader.onload = (event) => {
       try {
         const parsed = JSON.parse(event.target?.result as string);
-        if (parsed.type === 'container_export' && Array.isArray(parsed.nodes)) {
-          // Merge container subtree
-          const existingIds = new Set(nodes.map((n) => n.id));
-          const newNodes = [...nodes];
-          parsed.nodes.forEach((n: InventoryNode) => {
-            if (!existingIds.has(n.id)) {
-              newNodes.push(n);
-            }
-          });
-          onRestoreData(newNodes, memos);
-          setImportStatus(`成功匯入個別容器「${parsed.rootContainerName}」及 ${parsed.nodes.length} 項內容！`);
-        } else if (Array.isArray(parsed.nodes)) {
-          // Full household import
-          onRestoreData(parsed.nodes, parsed.memos || []);
-          if (parsed.householdName) {
-            onUpdateHouseholdName(parsed.householdName);
-          }
-          setImportStatus(`成功還原完整家庭資料（共 ${parsed.nodes.length} 個物件/容器）！`);
-        } else {
-          setImportStatus('檔案格式不相符，請確認為 HomeOrganizer 產生的 JSON 檔案。');
-        }
+        processParsedData(parsed);
       } catch (err) {
         setImportStatus('無法讀取檔案，請確認 JSON 語法正確。');
       }
@@ -123,14 +166,51 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
     reader.readAsText(file);
   };
 
+  // Process parsed data for both file and pasted JSON
+  const processParsedData = (parsed: any) => {
+    if (parsed.type === 'container_export' && Array.isArray(parsed.nodes)) {
+      const existingIds = new Set(nodes.map((n) => n.id));
+      const newNodes = [...nodes];
+      parsed.nodes.forEach((n: InventoryNode) => {
+        if (!existingIds.has(n.id)) {
+          newNodes.push(n);
+        }
+      });
+      onRestoreData(newNodes, memos);
+      setImportStatus(`成功匯入個別容器「${parsed.rootContainerName}」及 ${parsed.nodes.length} 項內容！`);
+    } else if (Array.isArray(parsed.nodes)) {
+      onRestoreData(parsed.nodes, parsed.memos || []);
+      if (parsed.householdName) {
+        onUpdateHouseholdName(parsed.householdName);
+      }
+      setImportStatus(`成功還原完整家庭資料（共 ${parsed.nodes.length} 個物件/容器）！`);
+    } else {
+      setImportStatus('檔案格式不相符，請確認為 HomeOrganizer 產生的 JSON 檔案。');
+    }
+  };
+
+  // Paste code restore
+  const handleRestoreFromPasted = () => {
+    try {
+      const parsed = JSON.parse(pastedJson.trim());
+      processParsedData(parsed);
+      setPastedJson('');
+      setIsPasteOpen(false);
+    } catch {
+      setImportStatus('貼上的代碼語法不正確，請確認為完整的 JSON 格式。');
+    }
+  };
+
   // Share App URL
   const handleShareApp = () => {
     if (navigator.share) {
-      navigator.share({
-        title: 'HomeOrganizer 家庭智慧生活收納管家',
-        text: '推薦這款專為家庭打造的物品拍照收納、層級容器管理與到期提醒工具！',
-        url: window.location.href,
-      }).catch(() => {});
+      navigator
+        .share({
+          title: 'HomeOrganizer 家庭智慧生活收納管家',
+          text: '推薦這款專為家庭打造的物品拍照收納、層級容器管理與到期提醒工具！',
+          url: window.location.href,
+        })
+        .catch(() => {});
     } else {
       navigator.clipboard.writeText(window.location.href);
       setCopied(true);
@@ -138,7 +218,7 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
     }
   };
 
-  // Copy full data bundle JSON to clipboard for instant family paste
+  // Copy full data bundle JSON
   const handleCopyDataBundle = () => {
     const jsonStr = exportFullHousehold(nodes, memos, members, householdName);
     navigator.clipboard.writeText(jsonStr);
@@ -146,7 +226,6 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
     setTimeout(() => setDataCopied(false), 2500);
   };
 
-  // Check PWA updates (只保留更新)
   const handleCheckForUpdates = async () => {
     setIsCheckingUpdate(true);
     setUpdateStatus(null);
@@ -162,31 +241,15 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
       } else {
         setUpdateStatus('已是最新版本');
       }
-    } catch (e) {
+    } catch {
       setUpdateStatus('目前為離線自成一體運行狀態，連線時將自動獲取更新。');
     } finally {
       setIsCheckingUpdate(false);
     }
   };
 
-  // Cloud Sync Simulation
-  const handleSimulateCloudSync = () => {
-    saveNodes(nodes);
-    saveMemos(memos);
-    setCloudSynced(true);
-    setTimeout(() => setCloudSynced(false), 3000);
-  };
-
-  // Restore Initial Demo Data
-  const handleResetDemoData = () => {
-    if (confirm('確定要重新載入系統預設示範資料嗎？（這將加入示範的客廳、廚房、常備醫藥與工具箱）')) {
-      onRestoreData(INITIAL_SAMPLE_NODES, INITIAL_SAMPLE_MEMOS);
-      setImportStatus('已還原為示範資料！');
-    }
-  };
-
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-950 pb-24">
+    <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-950 pb-36">
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
@@ -196,7 +259,7 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
         onChange={handleFileImport}
       />
 
-      {/* SECTION: SELF-CONTAINED STANDALONE APP STATUS (自成一體，無需伺服器，只保留更新) */}
+      {/* SECTION: SELF-CONTAINED STANDALONE APP STATUS */}
       <div className="p-4 rounded-3xl bg-gradient-to-br from-emerald-950/60 via-slate-900 to-slate-900 border border-emerald-500/40 space-y-2.5 shadow-xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -210,10 +273,9 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
 
         <p className="text-xs text-slate-300 leading-relaxed">
           透過分享連結開啟或安裝至桌面後，<strong>本應用即自成一體</strong>：所有收納資料、照片、條碼與到期排程均完全保存在您的設備本機。
-          <strong>平時無須與伺服器連線即可永久正常使用</strong>，僅在有新版本釋出時於背景獲取更新！
+          平時無須與伺服器連線即可永久正常使用，僅在有新版本釋出時於背景獲取更新！
         </p>
 
-        {/* One-click PWA Install / Mobile Home Screen Action */}
         <div className="pt-1">
           <PWAInstallButton variant="card" />
         </div>
@@ -233,14 +295,168 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
         </div>
       </div>
 
-      {/* Header */}
-      <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
-        <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-          <Cloud className="w-5 h-5 text-teal-400" />
-          備份管理與家人分享
-        </h2>
+      {/* SECTION: DEFAULT STORAGE DESTINATION (用戶要求：匯出匯入 default 要同一地方，或可選定存檔目的地) */}
+      <div className="p-4 rounded-2xl bg-slate-900 border border-teal-500/40 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-slate-200 text-sm flex items-center gap-2">
+            <HardDrive className="w-4 h-4 text-teal-400" />
+            <span>預設存檔目的地 (Default Destination)</span>
+          </h3>
+          <span className="text-[11px] text-teal-300 font-semibold">自訂匯出/匯入偏好</span>
+        </div>
         <p className="text-xs text-slate-400">
-          支援匯出與匯入完整家庭檔案或個別收納箱 JSON，內容可設定為家庭共有或個人私人。
+          設定您預設習慣的備份與還原方式，匯出與匯入將自動導向同一目標：
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs">
+          <button
+            onClick={() => handleDestinationChange('local_snapshot')}
+            className={`p-3 rounded-xl border text-left flex flex-col justify-between transition ${
+              exportDest === 'local_snapshot'
+                ? 'bg-teal-500/20 border-teal-400 text-teal-300 font-bold'
+                : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <div className="flex items-center gap-1.5 mb-1">
+              <Bookmark className="w-4 h-4 text-teal-400" />
+              <span>本機快照庫存檔</span>
+            </div>
+            <span className="text-[10px] text-slate-400 font-normal">
+              推薦首選：免下載檔案，一鍵隨時存檔與秒還原
+            </span>
+          </button>
+
+          <button
+            onClick={() => handleDestinationChange('download_json')}
+            className={`p-3 rounded-xl border text-left flex flex-col justify-between transition ${
+              exportDest === 'download_json'
+                ? 'bg-teal-500/20 border-teal-400 text-teal-300 font-bold'
+                : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <div className="flex items-center gap-1.5 mb-1">
+              <Download className="w-4 h-4 text-sky-400" />
+              <span>實體 JSON 檔案</span>
+            </div>
+            <span className="text-[10px] text-slate-400 font-normal">
+              下載檔案至手機或電腦儲存空間，適合跨裝置備份
+            </span>
+          </button>
+
+          <button
+            onClick={() => handleDestinationChange('clipboard_code')}
+            className={`p-3 rounded-xl border text-left flex flex-col justify-between transition ${
+              exportDest === 'clipboard_code'
+                ? 'bg-teal-500/20 border-teal-400 text-teal-300 font-bold'
+                : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <div className="flex items-center gap-1.5 mb-1">
+              <Copy className="w-4 h-4 text-purple-400" />
+              <span>複製文字代碼</span>
+            </div>
+            <span className="text-[10px] text-slate-400 font-normal">
+              直接將資料複製至剪貼簿，LINE/訊息快速轉移
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* SECTION: LOCAL SNAPSHOTS REPOSITORY */}
+      <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-slate-200 text-sm flex items-center gap-2">
+              <Bookmark className="w-4 h-4 text-teal-400" />
+              <span>本機版本快照存檔庫 ({snapshots.length} 份存檔)</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              大掃除前、換季或借還物品前存檔，可隨時一鍵秒還原
+            </p>
+          </div>
+          <button
+            onClick={() => setIsCreatingSnapshot(true)}
+            className="px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs flex items-center gap-1 transition shadow"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>建立新快照</span>
+          </button>
+        </div>
+
+        {isCreatingSnapshot && (
+          <form onSubmit={handleCreateSnapshot} className="p-3.5 rounded-xl bg-slate-800 border border-slate-700 space-y-2.5">
+            <label className="text-xs font-bold text-slate-300">快照備忘名稱</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newSnapshotName}
+                onChange={(e) => setNewSnapshotName(e.target.value)}
+                placeholder="例如: 2026 年底大掃除前、搬新辦公室前存檔..."
+                className="flex-1 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-teal-500"
+              />
+              <button
+                type="submit"
+                className="px-4 py-1.5 rounded-xl bg-teal-500 text-slate-950 font-bold text-xs"
+              >
+                保存存檔
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCreatingSnapshot(false)}
+                className="px-3 py-1.5 rounded-xl bg-slate-700 text-slate-300 text-xs"
+              >
+                取消
+              </button>
+            </div>
+          </form>
+        )}
+
+        {snapshots.length === 0 ? (
+          <p className="text-xs text-slate-500 text-center py-4 bg-slate-950/40 rounded-xl">
+            目前尚無本機快照。點選上方「建立新快照」可立即保存目前全部資料。
+          </p>
+        ) : (
+          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+            {snapshots.map((snap) => (
+              <div
+                key={snap.id}
+                className="p-3 rounded-xl bg-slate-800/70 border border-slate-700/70 flex items-center justify-between text-xs"
+              >
+                <div>
+                  <h4 className="font-bold text-slate-200">{snap.name}</h4>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {new Date(snap.createdAt).toLocaleString('zh-TW')} • 共 {snap.nodeCount} 個物件 / {snap.memoCount} 則備忘
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleRestoreSnapshot(snap)}
+                    className="px-2.5 py-1 rounded-lg bg-teal-500/20 text-teal-300 font-bold hover:bg-teal-500/30 border border-teal-500/30 transition"
+                  >
+                    一鍵還原
+                  </button>
+                  <button
+                    onClick={() => handleDeleteSnapshot(snap.id, snap.name)}
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 transition"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* SECTION: FULL FILE BACKUP & IMPORT */}
+      <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
+        <h3 className="font-bold text-slate-200 text-sm flex items-center gap-2">
+          <Download className="w-4 h-4 text-teal-400" />
+          <span>完整家庭檔案管理 (JSON 檔案 / 文字代碼)</span>
+        </h3>
+        <p className="text-xs text-slate-400">
+          包含全部收納空間、子容器、物件、照片、保固、過期日與家庭備忘錄。
         </p>
 
         {importStatus && (
@@ -249,17 +465,6 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
             <span>{importStatus}</span>
           </div>
         )}
-      </div>
-
-      {/* Section 1: Full Household Export / Import */}
-      <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
-        <h3 className="font-bold text-slate-200 text-sm flex items-center gap-2">
-          <Download className="w-4 h-4 text-teal-400" />
-          完整家庭檔案管理 (JSON 備份)
-        </h3>
-        <p className="text-xs text-slate-400">
-          包含全部收納空間、子容器、物件、照片、保固、過期日與家庭備忘錄。
-        </p>
 
         <div className="grid grid-cols-2 gap-2.5 pt-1">
           <button
@@ -267,31 +472,69 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
             className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold text-xs border border-slate-700 flex items-center justify-center gap-2 transition"
           >
             <Download className="w-4 h-4 text-teal-400" />
-            <span>匯出完整備份 JSON</span>
+            <span>下載完整備份 JSON</span>
           </button>
           <button
             onClick={() => fileInputRef.current?.click()}
             className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold text-xs border border-slate-700 flex items-center justify-center gap-2 transition"
           >
             <Upload className="w-4 h-4 text-sky-400" />
-            <span>匯入 JSON 檔案</span>
+            <span>從檔案匯入 JSON</span>
           </button>
         </div>
 
-        <button
-          onClick={handleCopyDataBundle}
-          className="w-full py-2 px-3 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700/60 flex items-center justify-center gap-1.5 transition"
-        >
-          {dataCopied ? <Check className="w-3.5 h-3.5 text-teal-400" /> : <Copy className="w-3.5 h-3.5" />}
-          <span>{dataCopied ? '已將完整資料 JSON 複製到剪貼簿！' : '複製完整資料文字碼 (免檔案快速轉移)'}</span>
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleCopyDataBundle}
+            className="flex-1 py-2 px-3 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700/60 flex items-center justify-center gap-1.5 transition"
+          >
+            {dataCopied ? <Check className="w-3.5 h-3.5 text-teal-400" /> : <Copy className="w-3.5 h-3.5" />}
+            <span>{dataCopied ? '已將完整資料複製！' : '複製文字備份碼'}</span>
+          </button>
+
+          <button
+            onClick={() => setIsPasteOpen((prev) => !prev)}
+            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 text-xs font-semibold border border-slate-700 flex items-center gap-1"
+          >
+            <FileCode className="w-3.5 h-3.5" />
+            <span>貼上代碼還原</span>
+          </button>
+        </div>
+
+        {isPasteOpen && (
+          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+            <label className="text-xs text-slate-300 font-semibold">貼上完整備份 JSON 代碼：</label>
+            <textarea
+              rows={4}
+              value={pastedJson}
+              onChange={(e) => setPastedJson(e.target.value)}
+              placeholder='在此貼上 {"version":"2.0", "householdName": ...} 代碼...'
+              className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-mono text-slate-200 focus:outline-none focus:border-teal-500"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setIsPasteOpen(false)}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 text-xs text-slate-400"
+              >
+                取消
+              </button>
+              <button
+                disabled={!pastedJson.trim()}
+                onClick={handleRestoreFromPasted}
+                className="px-4 py-1.5 rounded-lg bg-teal-500 disabled:opacity-40 text-slate-950 font-bold text-xs"
+              >
+                解析並還原
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Section 2: Single Container Export */}
+      {/* SECTION: SINGLE CONTAINER EXPORT */}
       <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
         <h3 className="font-bold text-slate-200 text-sm flex items-center gap-2">
           <FolderDown className="w-4 h-4 text-indigo-400" />
-          個別收納容器導出 (單獨分享某個箱子/房間)
+          <span>個別收納容器導出 (單獨分享某個箱子/房間)</span>
         </h3>
         <p className="text-xs text-slate-400">
           可單獨挑選客廳、工具箱或某個置物盒，導出成獨立的 JSON 文件傳給特定家人。
@@ -322,11 +565,11 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
         </div>
       </div>
 
-      {/* Section 3: Share App Link */}
+      {/* SECTION: SHARE APP LINK */}
       <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
         <h3 className="font-bold text-slate-200 text-sm flex items-center gap-2">
           <Share2 className="w-4 h-4 text-emerald-400" />
-          分享應用程式連結給家人
+          <span>分享應用程式連結給家人</span>
         </h3>
         <p className="text-xs text-slate-400">
           傳送此連結給家人，家人在手機點開即可直接成為其專屬管家，支援離線與更新。
@@ -341,14 +584,19 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
         </button>
       </div>
 
-      {/* Section 4: Reset Demo Data */}
+      {/* SECTION: RESET DEMO DATA */}
       <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 flex items-center justify-between">
         <div>
           <span className="font-bold text-slate-300 text-xs block">範例資料重置</span>
           <span className="text-[11px] text-slate-500">重新載入豐富的預設家庭物品與容器清單</span>
         </div>
         <button
-          onClick={handleResetDemoData}
+          onClick={() => {
+            if (confirm('確定要重新載入系統預設示範資料嗎？')) {
+              onRestoreData(INITIAL_SAMPLE_NODES, INITIAL_SAMPLE_MEMOS);
+              setImportStatus('已還原為示範資料！');
+            }
+          }}
           className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1.5 border border-slate-700"
         >
           <RotateCcw className="w-3.5 h-3.5" />

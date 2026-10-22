@@ -656,3 +656,190 @@ export function getExpirationStatus(dateStr?: string): {
     };
   }
 }
+
+// ----------------------------------------------------
+// New Features: Spaces, User Profiles, Gallery, Snapshots, Archiving
+// ----------------------------------------------------
+const STORAGE_KEY_SPACES = 'homeorganizer_spaces_v2';
+const STORAGE_KEY_ACTIVE_SPACE = 'homeorganizer_active_space_v2';
+const STORAGE_KEY_USERS = 'homeorganizer_users_v2';
+const STORAGE_KEY_ACTIVE_USER = 'homeorganizer_active_user_v2';
+const STORAGE_KEY_GALLERY = 'homeorganizer_gallery_v2';
+const STORAGE_KEY_SNAPSHOTS = 'homeorganizer_snapshots_v2';
+const STORAGE_KEY_EXPORT_DEST = 'homeorganizer_export_dest_v2';
+
+import { StorageSpace, UserProfile, GalleryPhoto, LocalSnapshot, ExportDestination } from '../types';
+
+export const DEFAULT_SPACES: StorageSpace[] = [
+  {
+    id: 'space-home',
+    name: '溫馨住宅總部 (家庭)',
+    type: 'home',
+    icon: '🏠',
+    description: '家庭公共與個人多房間空間（客廳、主臥、小孩房、廚房、玄關）',
+    createdAt: '2026-09-01T00:00:00Z',
+  },
+  {
+    id: 'space-office',
+    name: '台北總部 / 工作室 (辦公)',
+    type: 'office',
+    icon: '🏢',
+    description: '分公司多辦公間、伺服器機房、行政會議室與樣品儲藏室',
+    createdAt: '2026-09-01T00:00:00Z',
+  },
+  {
+    id: 'space-villa',
+    name: '休閒度假屋 / 戶外倉',
+    type: 'villa',
+    icon: '🏡',
+    description: '露營登山裝備、備用家具與戶外工具存放處',
+    createdAt: '2026-09-01T00:00:00Z',
+  },
+];
+
+export const DEFAULT_USER_PROFILES: UserProfile[] = [
+  { id: 'u-all', name: '全家 / 公共視角', avatar: '👨‍👩‍👧‍👦', role: 'admin' },
+  { id: 'u-dad', name: '爸爸 (戶長)', avatar: '👨🏻‍💻', role: 'admin', pinCode: '1234' },
+  { id: 'u-mom', name: '媽媽 (管理員)', avatar: '👩🏻‍💼', role: 'admin', pinCode: '8888' },
+  { id: 'u-kid1', name: '大寶', avatar: '👦🏻', role: 'member' },
+  { id: 'u-colleague', name: '辦公室 Alice', avatar: '👩🏻‍🔬', role: 'member' },
+];
+
+// Check if node is Unfiled (未歸檔區)
+export function isNodeUnfiled(node: InventoryNode): boolean {
+  if (node.type !== 'item') return false;
+  // If explicitly flagged as archived, not unfiled
+  if (node.isArchived) return false;
+  // If parent is null or 'unfiled', it is unfiled!
+  return !node.parentId || node.parentId === 'unfiled';
+}
+
+// Spaces Management
+export function loadSpaces(): StorageSpace[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_SPACES);
+    if (!raw) return DEFAULT_SPACES;
+    return JSON.parse(raw);
+  } catch {
+    return DEFAULT_SPACES;
+  }
+}
+
+export function saveSpaces(spaces: StorageSpace[]): void {
+  localStorage.setItem(STORAGE_KEY_SPACES, JSON.stringify(spaces));
+}
+
+export function loadActiveSpaceId(): string {
+  return localStorage.getItem(STORAGE_KEY_ACTIVE_SPACE) || 'space-home';
+}
+
+export function saveActiveSpaceId(spaceId: string): void {
+  localStorage.setItem(STORAGE_KEY_ACTIVE_SPACE, spaceId);
+}
+
+// User Profiles & Simulated Login / Passwords
+export function loadUserProfiles(): UserProfile[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_USERS);
+    if (!raw) return DEFAULT_USER_PROFILES;
+    return JSON.parse(raw);
+  } catch {
+    return DEFAULT_USER_PROFILES;
+  }
+}
+
+export function saveUserProfiles(users: UserProfile[]): void {
+  localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(users));
+}
+
+export function loadActiveUser(): UserProfile {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_ACTIVE_USER);
+    if (!raw) return DEFAULT_USER_PROFILES[0];
+    return JSON.parse(raw);
+  } catch {
+    return DEFAULT_USER_PROFILES[0];
+  }
+}
+
+export function saveActiveUser(user: UserProfile): void {
+  localStorage.setItem(STORAGE_KEY_ACTIVE_USER, JSON.stringify(user));
+}
+
+// Photo Asset Gallery Management
+export function loadGalleryPhotos(): GalleryPhoto[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_GALLERY);
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+export function saveGalleryPhoto(photo: GalleryPhoto): void {
+  const current = loadGalleryPhotos();
+  const filtered = current.filter((p) => p.id !== photo.id);
+  const updated = [photo, ...filtered];
+  localStorage.setItem(STORAGE_KEY_GALLERY, JSON.stringify(updated.slice(0, 100))); // keep max 100
+}
+
+export function deleteGalleryPhoto(photoId: string): void {
+  const current = loadGalleryPhotos();
+  const updated = current.filter((p) => p.id !== photoId);
+  localStorage.setItem(STORAGE_KEY_GALLERY, JSON.stringify(updated));
+}
+
+// Local Version Snapshots Management
+export function loadSnapshots(): LocalSnapshot[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_SNAPSHOTS);
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+export function saveSnapshot(name: string, data: HouseholdData): LocalSnapshot {
+  const current = loadSnapshots();
+  const newSnapshot: LocalSnapshot = {
+    id: 'snap-' + Date.now(),
+    name: name.trim() || `快照存檔 ${new Date().toLocaleDateString('zh-TW')}`,
+    createdAt: new Date().toISOString(),
+    nodeCount: data.nodes.length,
+    memoCount: data.memos.length,
+    data,
+  };
+  const updated = [newSnapshot, ...current].slice(0, 20); // retain up to 20 snapshots
+  localStorage.setItem(STORAGE_KEY_SNAPSHOTS, JSON.stringify(updated));
+  return newSnapshot;
+}
+
+export function deleteSnapshot(id: string): void {
+  const current = loadSnapshots();
+  const updated = current.filter((s) => s.id !== id);
+  localStorage.setItem(STORAGE_KEY_SNAPSHOTS, JSON.stringify(updated));
+}
+
+// Export Destination Preference
+export function loadExportDestination(): ExportDestination {
+  const val = localStorage.getItem(STORAGE_KEY_EXPORT_DEST) as ExportDestination;
+  return val || 'local_snapshot';
+}
+
+export function saveExportDestination(dest: ExportDestination): void {
+  localStorage.setItem(STORAGE_KEY_EXPORT_DEST, dest);
+}
+
+// Private Container Key Expiration Check
+export function isAccessKeyValid(node: InventoryNode, inputKey?: string): boolean {
+  if (!node.accessKey) return true; // no private key required
+  if (inputKey && inputKey === node.accessKey) {
+    if (!node.accessKeyExpiry || node.accessKeyExpiry === 'unlimited') return true;
+    const expiryTime = new Date(node.accessKeyExpiry).getTime();
+    if (Date.now() <= expiryTime) return true;
+  }
+  return false;
+}
+
