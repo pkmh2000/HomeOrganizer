@@ -36,6 +36,7 @@ import { GeminiAssistantModal } from './components/GeminiAssistantModal';
 import { MobileInstallBanner } from './components/MobileInstallBanner';
 import { PhotoGalleryModal } from './components/PhotoGalleryModal';
 import { AccountSpaceModal } from './components/AccountSpaceModal';
+import { TransferPayload } from './components/NodeTransferModal';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import {
   WifiOff,
@@ -64,6 +65,7 @@ export default function App() {
   const [activeSpaceId, setActiveSpaceId] = useState<string>(() => loadActiveSpaceId());
   const [spaces, setSpaces] = useState<StorageSpace[]>(() => loadSpaces());
   const [unlockedContainerIds, setUnlockedContainerIds] = useState<Set<string>>(new Set());
+  const [openUnfiledInbox, setOpenUnfiledInbox] = useState(false);
 
   // Undo / Redo History Stack (at least 5 steps, supported up to 20 steps)
   const {
@@ -191,12 +193,62 @@ export default function App() {
     }
   };
 
-  // Save new batch photos into current container
-  const handleSaveBatchNodes = (newNodes: InventoryNode[]) => {
+  // Save new batch photos into current container or unfiled inbox
+  const handleSaveBatchNodes = (
+    newNodes: InventoryNode[],
+    targetPlacement: 'inbox' | 'current' = 'inbox'
+  ) => {
     recordHistory(nodes, `批次新增 ${newNodes.length} 張照片物件`);
     setNodes((prev) => [...prev, ...newNodes]);
     setActiveTab('containers');
     setShowBottomDesk(false);
+
+    if (targetPlacement === 'inbox') {
+      setCurrentContainerId(null);
+      setOpenUnfiledInbox(true);
+    }
+  };
+
+  // Unified Node Transfer handler (single or batch)
+  const handleExecuteTransfer = (payload: TransferPayload) => {
+    const { nodeIds, targetParentId, targetSpaceId, targetOwnerName, isArchived, cascadeToChildren } = payload;
+    const count = nodeIds.length;
+    recordHistory(nodes, `移轉 ${count} 項物件/容器`);
+
+    const idSet = new Set(nodeIds);
+
+    // If cascade to children for spaces
+    if (cascadeToChildren && targetSpaceId) {
+      const addChildren = (parentId: string) => {
+        nodes.forEach((n) => {
+          if (n.parentId === parentId) {
+            idSet.add(n.id);
+            if (n.type === 'container') addChildren(n.id);
+          }
+        });
+      };
+      nodeIds.forEach((id) => addChildren(id));
+    }
+
+    setNodes((prev) =>
+      prev.map((n) => {
+        if (!idSet.has(n.id)) return n;
+        const updated = { ...n, updatedAt: new Date().toISOString() };
+        if (targetParentId !== undefined) {
+          updated.parentId = targetParentId;
+        }
+        if (isArchived !== undefined) {
+          updated.isArchived = isArchived;
+        }
+        if (targetSpaceId !== undefined) {
+          updated.spaceId = targetSpaceId;
+        }
+        if (targetOwnerName !== undefined) {
+          updated.ownerName = targetOwnerName;
+        }
+        return updated;
+      })
+    );
   };
 
   // Save or update an item/container
@@ -483,6 +535,9 @@ export default function App() {
             onBatchTogglePrivate={handleBatchTogglePrivate}
             onBatchArchive={handleBatchArchive}
             onQuickArchiveItem={handleQuickArchiveItem}
+            onExecuteTransfer={handleExecuteTransfer}
+            openUnfiledDirectly={openUnfiledInbox}
+            onHandledUnfiledDirectly={() => setOpenUnfiledInbox(false)}
           />
         )}
 

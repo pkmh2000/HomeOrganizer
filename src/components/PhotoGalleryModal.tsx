@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { GalleryPhoto, InventoryNode } from '../types';
 import { loadGalleryPhotos, saveGalleryPhoto, deleteGalleryPhoto } from '../utils/storage';
+import { compressImageFile } from '../utils/imageCompressor';
 
 interface PhotoGalleryModalProps {
   isOpen: boolean;
@@ -126,15 +127,17 @@ export const PhotoGalleryModal: React.FC<PhotoGalleryModalProps> = ({
   }, [allPhotos, searchQuery, filterType, nodes]);
 
   // Handle uploading photos into gallery
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUrl = event.target?.result as string;
-        if (!dataUrl) return;
+    for (const file of Array.from(files)) {
+      try {
+        const dataUrl = await compressImageFile(file, {
+          maxWidth: 1080,
+          maxHeight: 1080,
+          quality: 0.82,
+        });
 
         const newPhoto: GalleryPhoto = {
           id: 'gal-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
@@ -144,10 +147,11 @@ export const PhotoGalleryModal: React.FC<PhotoGalleryModalProps> = ({
         };
 
         saveGalleryPhoto(newPhoto);
-        setCustomGallery(loadGalleryPhotos());
-      };
-      reader.readAsDataURL(file);
-    });
+      } catch (err) {
+        console.warn('Failed to upload photo into gallery', err);
+      }
+    }
+    setCustomGallery(loadGalleryPhotos());
   };
 
   const handleDeleteCustomPhoto = (id: string, e: React.MouseEvent) => {

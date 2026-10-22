@@ -31,6 +31,7 @@ import {
 import { InventoryNode, Tag, NodeType, LoanStatus } from '../types';
 import { TAG_PALETTE, DEFAULT_MEMBERS } from '../utils/storage';
 import { generateQRCodeDataURL } from '../utils/qr';
+import { compressImageFile } from '../utils/imageCompressor';
 import { BarcodeScannerModal } from './BarcodeScannerModal';
 import { PhotoGalleryModal } from './PhotoGalleryModal';
 
@@ -152,30 +153,32 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, isReceipt = false) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>, isReceipt = false) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const result = event.target?.result as string;
-        if (result) {
-          if (isReceipt) {
-            setFormData((prev) => ({
-              ...prev,
-              receiptPhotos: [...(prev.receiptPhotos || []), result],
-            }));
-          } else {
-            setFormData((prev) => ({
-              ...prev,
-              photos: [...(prev.photos || []), result],
-            }));
-          }
+    for (const file of Array.from(files)) {
+      try {
+        const compressed = await compressImageFile(file, {
+          maxWidth: 1080,
+          maxHeight: 1080,
+          quality: 0.82,
+        });
+        if (isReceipt) {
+          setFormData((prev) => ({
+            ...prev,
+            receiptPhotos: [...(prev.receiptPhotos || []), compressed],
+          }));
+        } else {
+          setFormData((prev) => ({
+            ...prev,
+            photos: [...(prev.photos || []), compressed],
+          }));
         }
-      };
-      reader.readAsDataURL(file);
-    });
+      } catch (err) {
+        console.warn('Failed to compress image in ItemEditModal', err);
+      }
+    }
   };
 
   const removePhoto = (index: number, isReceipt = false) => {

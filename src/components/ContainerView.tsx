@@ -29,6 +29,10 @@ import {
   Unlock,
   Check,
   X,
+  ArrowRightLeft,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { InventoryNode } from '../types';
 import {
@@ -38,6 +42,7 @@ import {
   exportContainerSubtree,
   isNodeUnfiled,
 } from '../utils/storage';
+import { NodeTransferModal, TransferPayload } from './NodeTransferModal';
 
 interface ContainerViewProps {
   currentContainerId: string | null;
@@ -54,6 +59,9 @@ interface ContainerViewProps {
   onBatchTogglePrivate?: (nodeIds: string[]) => void;
   onBatchArchive?: (nodeIds: string[]) => void;
   onQuickArchiveItem?: (itemId: string, targetParentId: string) => void;
+  onExecuteTransfer?: (payload: TransferPayload) => void;
+  openUnfiledDirectly?: boolean;
+  onHandledUnfiledDirectly?: () => void;
 }
 
 export const ContainerView: React.FC<ContainerViewProps> = ({
@@ -70,6 +78,9 @@ export const ContainerView: React.FC<ContainerViewProps> = ({
   onBatchTogglePrivate,
   onBatchArchive,
   onQuickArchiveItem,
+  onExecuteTransfer,
+  openUnfiledDirectly,
+  onHandledUnfiledDirectly,
 }) => {
   const [filterQuery, setFilterQuery] = useState('');
   const [viewUnfiledOnly, setViewUnfiledOnly] = useState(false);
@@ -78,13 +89,27 @@ export const ContainerView: React.FC<ContainerViewProps> = ({
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // Transfer & Move Modal State
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [nodesToTransfer, setNodesToTransfer] = useState<InventoryNode[]>([]);
+  const [batchTargetContainer, setBatchTargetContainer] = useState<string>('');
+  const [showTransferGuide, setShowTransferGuide] = useState(false);
+
   // Move Modal State
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const [targetContainerForMove, setTargetContainerForMove] = useState<string | null>(null);
 
-  // Quick Archive Modal State (for single unfiled item)
+  // Quick Archive Modal State (for single unfiled item fallback)
   const [itemToArchive, setItemToArchive] = useState<InventoryNode | null>(null);
   const [targetContainerForArchive, setTargetContainerForArchive] = useState<string>('');
+
+  // Auto-switch to unfiled if openUnfiledDirectly requested
+  React.useEffect(() => {
+    if (openUnfiledDirectly) {
+      setViewUnfiledOnly(true);
+      onHandledUnfiledDirectly?.();
+    }
+  }, [openUnfiledDirectly, onHandledUnfiledDirectly]);
 
   // Unfiled nodes count
   const unfiledNodes = useMemo(() => {
@@ -187,6 +212,42 @@ export const ContainerView: React.FC<ContainerViewProps> = ({
     if (selectedIds.size === 0) return;
     onBatchTogglePrivate?.(Array.from(selectedIds));
     setSelectedIds(new Set());
+  };
+
+  // Set default batch target container if none selected
+  React.useEffect(() => {
+    if (!batchTargetContainer && availableContainers.length > 0) {
+      setBatchTargetContainer(availableContainers[0].id);
+    }
+  }, [availableContainers, batchTargetContainer]);
+
+  // Instant direct batch archive without waiting modal
+  const handleInstantBatchArchive = () => {
+    if (selectedIds.size === 0 || !batchTargetContainer) return;
+    onBatchMove?.(Array.from(selectedIds), batchTargetContainer);
+    setSelectedIds(new Set());
+    setIsSelectMode(false);
+  };
+
+  // Instant direct single item archive without waiting modal
+  const handleDirectSingleArchive = (itemId: string, targetContainerId: string) => {
+    if (!targetContainerId) return;
+    onQuickArchiveItem?.(itemId, targetContainerId);
+  };
+
+  // Open transfer modal for single node
+  const handleOpenTransferSingle = (node: InventoryNode, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setNodesToTransfer([node]);
+    setTransferModalOpen(true);
+  };
+
+  // Open transfer modal for batch selected nodes
+  const handleOpenTransferBatch = () => {
+    if (selectedIds.size === 0) return;
+    const selectedNodesList = nodes.filter((n) => selectedIds.has(n.id));
+    setNodesToTransfer(selectedNodesList);
+    setTransferModalOpen(true);
   };
 
   const handleSingleArchiveConfirm = () => {
@@ -359,6 +420,14 @@ export const ContainerView: React.FC<ContainerViewProps> = ({
                 {/* Container Actions */}
                 <div className="flex items-center gap-1.5">
                   <button
+                    onClick={(e) => handleOpenTransferSingle(currentContainer, e)}
+                    title="移轉此容器至其他容器、空間或擁有人"
+                    className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-400 hover:text-white transition flex items-center gap-1"
+                  >
+                    <ArrowRightLeft className="w-4 h-4" />
+                    <span className="hidden sm:inline text-xs font-semibold">移轉</span>
+                  </button>
+                  <button
                     onClick={() => onPrintContainer(currentContainer)}
                     title="列印 QR Code 收納標籤"
                     className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-400 transition"
@@ -522,11 +591,22 @@ export const ContainerView: React.FC<ContainerViewProps> = ({
                       </p>
                     </div>
 
-                    {/* Enter Arrow */}
+                    {/* Actions: Transfer & Enter */}
                     {!isSelectMode && (
-                      <div className="mt-2 pt-2 border-t border-slate-800/60 flex items-center justify-between text-[11px] text-teal-400 font-semibold">
-                        <span>進入容器</span>
-                        <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition" />
+                      <div className="mt-2 pt-2 border-t border-slate-800/60 flex items-center justify-between text-[11px]">
+                        <button
+                          type="button"
+                          onClick={(e) => handleOpenTransferSingle(container, e)}
+                          title="移轉此容器至其他容器、空間或擁有人"
+                          className="px-2 py-0.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-teal-300 flex items-center gap-1 transition"
+                        >
+                          <ArrowRightLeft className="w-3 h-3" />
+                          <span>移轉</span>
+                        </button>
+                        <span className="text-teal-400 font-semibold flex items-center gap-0.5 group-hover:translate-x-1 transition">
+                          <span>進入容器</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </span>
                       </div>
                     )}
                   </div>
@@ -535,6 +615,38 @@ export const ContainerView: React.FC<ContainerViewProps> = ({
             </div>
           </div>
         )}
+
+        {/* Transfer & Archiving Guide Banner (User request: 物件/容器 歸檔或轉移 要如何移轉?) */}
+        <div className="bg-slate-900/70 border border-slate-800 rounded-2xl overflow-hidden text-xs">
+          <button
+            type="button"
+            onClick={() => setShowTransferGuide((p) => !p)}
+            className="w-full px-3.5 py-2.5 flex items-center justify-between text-slate-300 hover:text-white transition"
+          >
+            <span className="flex items-center gap-2 font-bold text-teal-300">
+              <HelpCircle className="w-4 h-4 text-teal-400" />
+              <span>💡 物件與容器移轉／歸檔指南（點此展開查看）</span>
+            </span>
+            {showTransferGuide ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+
+          {showTransferGuide && (
+            <div className="px-4 pb-3.5 pt-1 text-slate-300 border-t border-slate-800/60 space-y-2 bg-slate-950/40">
+              <div className="flex items-start gap-2">
+                <span className="px-1.5 py-0.5 rounded bg-teal-500/20 text-teal-300 font-bold shrink-0 text-[10px]">1</span>
+                <p><strong>拍照與新收納</strong>：相機拍照後系統預設置於「未歸檔收件匣」，拍照時亦可直接選擇儲存容器。</p>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold shrink-0 text-[10px]">2</span>
+                <p><strong>免等待多選歸檔</strong>：在未歸檔收件匣勾選多個項目，在下方控制列挑選目標容器並點擊「立即歸檔」，無需任何等待彈窗！</p>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold shrink-0 text-[10px]">3</span>
+                <p><strong>容器與物件移轉</strong>：點擊卡片上的「⇄ 移轉」按鈕，可自由變更所屬容器、跨實體空間（例如家庭轉移到辦公室）或移轉給其他負責成員。</p>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* ITEMS SECTION */}
         <div>
@@ -548,10 +660,58 @@ export const ContainerView: React.FC<ContainerViewProps> = ({
 
             {viewUnfiledOnly && items.length > 0 && (
               <span className="text-[11px] text-amber-300">
-                點選右側「歸檔」按鈕，即可將物品收入對應容器中
+                可勾選下方物品直接歸檔，或點選卡片直接選定目標容器
               </span>
             )}
           </div>
+
+          {/* Unfiled Multi-Select Archive Toolbar (User request: 快速歸檔 改成 多選歸檔, 不需要浮現等待) */}
+          {viewUnfiledOnly && items.length > 0 && (
+            <div className="mb-4 p-3.5 rounded-2xl bg-gradient-to-r from-amber-950/60 via-slate-900 to-slate-950 border border-amber-500/50 shadow-xl space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                  <span className="font-bold text-xs sm:text-sm text-amber-200">
+                    多選歸檔控制台（免等待彈窗，勾選後立即入庫）
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={selectedIds.size === items.length ? handleDeselectAll : handleSelectAll}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
+                  >
+                    {selectedIds.size === items.length ? '取消全選' : `全選未歸檔 (${items.length})`}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80">
+                <span className="text-xs text-slate-300 font-semibold shrink-0">歸檔目標容器：</span>
+                <select
+                  value={batchTargetContainer}
+                  onChange={(e) => setBatchTargetContainer(e.target.value)}
+                  className="flex-1 min-w-[200px] bg-slate-950 border border-amber-500/40 rounded-xl px-3 py-1.5 text-xs text-slate-100 outline-none focus:border-amber-400"
+                >
+                  {availableContainers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      📦 {c.name}
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  disabled={selectedIds.size === 0 || !batchTargetContainer}
+                  onClick={handleInstantBatchArchive}
+                  className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-400 hover:from-amber-400 hover:to-orange-300 text-slate-950 font-black text-xs shadow-md active:scale-95 disabled:opacity-40 transition flex items-center gap-1.5"
+                >
+                  <Archive className="w-4 h-4 stroke-[2.5]" />
+                  <span>立即歸檔 ({selectedIds.size} 件)</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           {items.length === 0 && subContainers.length === 0 ? (
             <div className="py-12 flex flex-col items-center justify-center text-center text-slate-500">
@@ -673,32 +833,57 @@ export const ContainerView: React.FC<ContainerViewProps> = ({
                       )}
                     </div>
 
-                    {/* Quick Archive button if unfiled, or quick upgrade to container */}
-                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    {/* Action buttons: Direct 1-click container archive, transfer, or toggle type */}
+                    <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                       {isUnfiledItem ? (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setItemToArchive(item);
-                            setTargetContainerForArchive(availableContainers[0]?.id || '');
-                          }}
-                          className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-400 hover:from-amber-400 hover:to-orange-300 text-slate-950 font-bold text-xs flex items-center gap-1 shadow active:scale-95 transition"
-                        >
-                          <Archive className="w-3.5 h-3.5" />
-                          <span>快速歸檔</span>
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            defaultValue=""
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                handleDirectSingleArchive(item.id, e.target.value);
+                              }
+                            }}
+                            className="bg-amber-950/80 hover:bg-amber-900 border border-amber-500/50 text-amber-200 text-xs rounded-xl px-2.5 py-1.5 font-bold outline-none cursor-pointer max-w-[140px] truncate"
+                          >
+                            <option value="" disabled>📥 點選歸檔...</option>
+                            {availableContainers.map((c) => (
+                              <option key={c.id} value={c.id} className="bg-slate-900 text-slate-100">
+                                📦 {c.name}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={(e) => handleOpenTransferSingle(item, e)}
+                            title="移轉此物件容器或空間"
+                            className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-400 border border-slate-700 transition"
+                          >
+                            <ArrowRightLeft className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       ) : (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onToggleType(item);
-                          }}
-                          title="將此物件升格為容器 (可收納更多物品)"
-                          className="p-2 rounded-xl bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white transition flex items-center gap-1 text-[11px]"
-                        >
-                          <Layers className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">轉成容器</span>
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => handleOpenTransferSingle(item, e)}
+                            title="移轉此物件至其他容器、空間或擁有人"
+                            className="px-2 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-teal-300 border border-slate-700 transition flex items-center gap-1 text-[11px]"
+                          >
+                            <ArrowRightLeft className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">移轉</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleType(item);
+                            }}
+                            title="將此物件升格為容器 (可收納更多物品)"
+                            className="p-1.5 rounded-xl bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white transition flex items-center gap-1 text-[11px]"
+                          >
+                            <Layers className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -729,10 +914,20 @@ export const ContainerView: React.FC<ContainerViewProps> = ({
             <button
               disabled={selectedIds.size === 0}
               onClick={() => setIsMoveModalOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 font-semibold disabled:opacity-40 transition flex items-center gap-1"
+              className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 font-semibold disabled:opacity-40 transition flex items-center gap-1"
             >
               <FolderInput className="w-3.5 h-3.5" />
               <span>移動至...</span>
+            </button>
+
+            {/* Batch Transfer (跨容器/跨空間/轉移責任人) */}
+            <button
+              disabled={selectedIds.size === 0}
+              onClick={handleOpenTransferBatch}
+              className="px-2.5 py-1.5 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 font-semibold disabled:opacity-40 transition flex items-center gap-1 border border-teal-500/40"
+            >
+              <ArrowRightLeft className="w-3.5 h-3.5" />
+              <span>移轉/轉移</span>
             </button>
 
             {/* Batch Archive */}
@@ -886,6 +1081,23 @@ export const ContainerView: React.FC<ContainerViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* NODE TRANSFER & ARCHIVING MODAL (Single & Batch) */}
+      <NodeTransferModal
+        isOpen={transferModalOpen}
+        onClose={() => setTransferModalOpen(false)}
+        targetNodes={nodesToTransfer}
+        allNodes={nodes}
+        onExecuteTransfer={(payload) => {
+          if (onExecuteTransfer) {
+            onExecuteTransfer(payload);
+          } else if (payload.targetParentId !== undefined) {
+            onBatchMove?.(payload.nodeIds, payload.targetParentId);
+          }
+          setSelectedIds(new Set());
+          setIsSelectMode(false);
+        }}
+      />
     </div>
   );
 };

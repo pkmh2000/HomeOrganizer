@@ -11,16 +11,19 @@ import {
   Lock,
   Sparkles,
   RefreshCw,
+  Inbox,
+  Loader2,
 } from 'lucide-react';
 import { InventoryNode, NodeType } from '../types';
 import { saveGalleryPhoto } from '../utils/storage';
+import { compressImageFile } from '../utils/imageCompressor';
 
 interface BatchPhotoIntakeModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentContainerId: string | null;
   currentContainerName: string;
-  onSaveBatch: (newNodes: InventoryNode[]) => void;
+  onSaveBatch: (newNodes: InventoryNode[], targetPlacement?: 'inbox' | 'current') => void;
 }
 
 interface DraftCard {
@@ -46,36 +49,50 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
   const [draftCards, setDraftCards] = useState<DraftCard[]>([]);
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [aiAnalysisProgress, setAiAnalysisProgress] = useState('');
+  const [isProcessingPhotos, setIsProcessingPhotos] = useState(false);
+  // User requirement: 拍照後 應該先置放在 未歸檔收件匣
+  const [targetPlacement, setTargetPlacement] = useState<'inbox' | 'current'>('inbox');
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
   if (!isOpen) return null;
 
-  const handleFiles = (files: FileList | null) => {
+  const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
+    setIsProcessingPhotos(true);
 
-    Array.from(files).forEach((file, index) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const result = e.target?.result as string;
-        if (result) {
-          const draftId = 'draft-' + Date.now() + '-' + index + '-' + Math.random().toString(36).substring(2, 6);
+    try {
+      const fileArray = Array.from(files);
+      for (let i = 0; i < fileArray.length; i++) {
+        const file = fileArray[i];
+        try {
+          // Compress high-res mobile photos to prevent exceeding browser localStorage quota
+          const compressed = await compressImageFile(file, {
+            maxWidth: 1080,
+            maxHeight: 1080,
+            quality: 0.82,
+          });
+
+          const draftId = 'draft-' + Date.now() + '-' + i + '-' + Math.random().toString(36).substring(2, 6);
           setDraftCards((prev) => [
             ...prev,
             {
               id: draftId,
-              photoUrl: result,
-              name: `未命名物品 #${prev.length + 1}`,
+              photoUrl: compressed,
+              name: `拍照物件 #${prev.length + 1}`,
               type: 'item',
               isPrivate: false,
               quantity: 1,
             },
           ]);
+        } catch (err) {
+          console.error('Error compressing camera photo:', err);
         }
-      };
-      reader.readAsDataURL(file);
-    });
+      }
+    } finally {
+      setIsProcessingPhotos(false);
+    }
   };
 
   const updateDraft = (id: string, updates: Partial<DraftCard>) => {
@@ -163,14 +180,15 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
       }
     });
 
+    const isInbox = targetPlacement === 'inbox';
     const createdNodes: InventoryNode[] = draftCards.map((draft, idx) => ({
       id: 'node-' + Date.now() + '-' + idx + '-' + Math.random().toString(36).substring(2, 7),
-      parentId: currentContainerId,
+      parentId: isInbox ? null : currentContainerId,
       type: draft.type,
       name: draft.name.trim() || (draft.type === 'container' ? '未命名收納盒' : '未命名物品'),
       isPrivate: draft.isPrivate,
-      isArchived: currentContainerId !== null, // If added in root without container, placed in Unfiled Inbox!
-      photos: [draft.photoUrl],
+      isArchived: !isInbox, // if inbox => false (placed in unfiled inbox for quick batch archiving)
+      photos: draft.photoUrl ? [draft.photoUrl] : [],
       quantity: draft.quantity || 1,
       unit: draft.type === 'container' ? '個' : '件',
       description: draft.description,
@@ -179,13 +197,13 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
         ? [{ id: 't-gemini-' + idx, name: draft.category, color: draft.color || '#0d9488' }]
         : draft.type === 'container'
         ? [{ id: 't-box', name: '收納容器', color: '#6366f1' }]
-        : [{ id: 't-new', name: '待補資料', color: '#f59e0b' }],
+        : [{ id: 't-new', name: '待歸檔', color: '#f59e0b' }],
       lastStoredDate: new Date().toISOString().split('T')[0],
       createdAt: now,
       updatedAt: now,
     }));
 
-    onSaveBatch(createdNodes);
+    onSaveBatch(createdNodes, targetPlacement);
     setDraftCards([]);
     onClose();
   };
@@ -247,7 +265,7 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
             快速多照片批次收納
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            收納目標位置：<span className="text-teal-300 font-semibold">{currentContainerName}</span>
+            拍完後先置入收件匣，稍後可多選批次歸檔至容器
           </p>
         </div>
         <button
@@ -257,6 +275,49 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
           <X className="w-5 h-5" />
         </button>
       </div>
+
+      {/* Destination Selector (User request: 拍照後 應該先置放在 未歸檔收件匣) */}
+      <div className="px-4 py-2.5 bg-slate-950/80 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <span className="text-slate-400 font-semibold flex items-center gap-1.5">
+          <span>儲存目的地：</span>
+        </span>
+        <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+          <button
+            type="button"
+            onClick={() => setTargetPlacement('inbox')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+              targetPlacement === 'inbox'
+                ? 'bg-amber-500 text-slate-950 shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Inbox className="w-3.5 h-3.5" />
+            <span>📥 未歸檔收件匣 (預設)</span>
+          </button>
+          {currentContainerId && (
+            <button
+              type="button"
+              onClick={() => setTargetPlacement('current')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+                targetPlacement === 'current'
+                  ? 'bg-teal-500 text-slate-950 shadow-md'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Box className="w-3.5 h-3.5" />
+              <span>📦 {currentContainerName}</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Photo Compression / Loading Banner */}
+      {isProcessingPhotos && (
+        <div className="bg-teal-950/80 border-b border-teal-500/40 px-4 py-2 text-xs text-teal-300 flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
+          <span>正在壓縮處理相機照片並優化儲存體積...</span>
+        </div>
+      )}
 
       {/* Photo Capture Triggers & Gemini AI Button */}
       <div className="p-3.5 bg-slate-900/50 border-b border-slate-800 flex flex-wrap items-center gap-2">
