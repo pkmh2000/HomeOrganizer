@@ -107,6 +107,15 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
     return result;
   }, [allNodes]);
 
+  // Get current target label (placed before conditional return to strictly satisfy React Rules of Hooks)
+  const destinationTitle = useMemo(() => {
+    if (targetDestination === 'inbox') return '📥 未歸檔收件匣';
+    if (targetDestination === 'current') return `📦 ${currentContainerName}`;
+    if (targetDestination === 'root') return '🏠 全家總覽空間 (頂層)';
+    const found = allNodes.find((n) => n.id === targetDestination);
+    return found ? `📦 ${found.name}` : '自選目的地容器';
+  }, [targetDestination, currentContainerName, allNodes]);
+
   if (!isOpen) return null;
 
   // Handle incoming camera or gallery photos
@@ -384,15 +393,6 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
     setDraftCards((prev) => [...prev, newDraft]);
     setSelectedIds((prev) => new Set([...prev, newId]));
   };
-
-  // Get current target label
-  const destinationTitle = useMemo(() => {
-    if (targetDestination === 'inbox') return '📥 未歸檔收件匣';
-    if (targetDestination === 'current') return `📦 ${currentContainerName}`;
-    if (targetDestination === 'root') return '🏠 全家總覽空間 (頂層)';
-    const found = allNodes.find((n) => n.id === targetDestination);
-    return found ? `📦 ${found.name}` : '自選目的地容器';
-  }, [targetDestination, currentContainerName, allNodes]);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur-md">
