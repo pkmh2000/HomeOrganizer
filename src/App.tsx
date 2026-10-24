@@ -80,24 +80,16 @@ export default function App() {
     dismissToast,
   } = useUndoHistory(20);
 
-  // UI Navigation State
-  const [activeTab, setActiveTab] = useState<ViewTab>('dashboard');
+  // UI Navigation State: 開啟 app 優先進入「空間收納」畫面
+  const [activeTab, setActiveTab] = useState<ViewTab>('containers');
   const [currentContainerId, setCurrentContainerId] = useState<string | null>(null);
   const [showPrivate, setShowPrivate] = useState<boolean>(true);
 
-  // Pure View Mode: Hides floating desk & camera buttons so view area is 100% unobstructed!
+  // Pure View Mode: Hides bottom navigation bar so view area is 100% unobstructed!
   const [pureViewMode, setPureViewMode] = useState<boolean>(false);
-
-  // Bottom Desk Toggle
-  const [showBottomDesk, setShowBottomDesk] = useState<boolean>(false);
-
-  const toggleBottomDesk = () => {
-    setShowBottomDesk((prev) => !prev);
-  };
 
   const handleTabChange = (tab: ViewTab) => {
     setActiveTab(tab);
-    setShowBottomDesk(false); // auto-collapse!
   };
 
   // Modals State
@@ -203,7 +195,6 @@ export default function App() {
     recordHistory(nodes, `批次存入 ${newNodes.length} 張照片物件`);
     setNodes((prev) => [...prev, ...newNodes]);
     setActiveTab('containers');
-    setShowBottomDesk(false);
 
     if (targetDestinationId === 'inbox') {
       setCurrentContainerId(null);
@@ -468,13 +459,12 @@ export default function App() {
         onChangeTab={handleTabChange}
         showPrivate={showPrivate}
         onToggleShowPrivate={() => setShowPrivate((p) => !p)}
-        showBottomDesk={showBottomDesk}
-        onToggleBottomDesk={toggleBottomDesk}
         onOpenSearch={() => setIsVisualSearchOpen(true)}
         onOpenScanner={() => setIsScannerOpen(true)}
         onOpenSuggestions={() => setIsSuggestionsOpen(true)}
         onOpenGemini={() => setIsGeminiOpen(true)}
         expiringAlertCount={expiringCount}
+        memoCount={memos.filter((m) => !m.isDone).length}
         currentContainerName={currentContainerName}
         currentContainerId={currentContainerId}
         onBackContainer={handleBackContainer}
@@ -522,7 +512,6 @@ export default function App() {
             nodes={visibleNodes}
             onNavigateContainer={(id) => {
               setCurrentContainerId(id);
-              setShowBottomDesk(false); // auto-collapse desk when entering container!
             }}
             onOpenBatchIntake={() => setIsBatchIntakeOpen(true)}
             onOpenNewItem={() => {
@@ -602,47 +591,14 @@ export default function App() {
           />
         )}
 
-        {/* Floating Controls when bottom desk is closed (User request: 無用的 desk 平時收起；需要時可隱藏避開最後一項) */}
-        {!showBottomDesk && !pureViewMode && (
-          <div className="fixed bottom-5 inset-x-0 z-30 flex items-center justify-between px-4 pointer-events-none animate-fade-in">
-            {/* Left: Open Desk Toggle Pill */}
-            <button
-              onClick={() => setShowBottomDesk(true)}
-              title="開啟功能導航工作盤"
-              className="pointer-events-auto h-11 px-3.5 rounded-full bg-slate-900/95 hover:bg-slate-800 text-teal-400 font-bold text-xs flex items-center gap-1.5 shadow-xl border border-slate-700/80 active:scale-95 transition backdrop-blur-md"
-            >
-              <PanelBottomOpen className="w-4 h-4" />
-              <span>工作盤</span>
-              {expiringCount > 0 && (
-                <span className="w-2 h-2 rounded-full bg-amber-400" />
-              )}
-            </button>
-
-            {/* Right: Quick Camera Batch Photo Action */}
-            <button
-              onClick={() => setIsBatchIntakeOpen(true)}
-              title="拍照 / 拍照暫存區"
-              className="pointer-events-auto h-11 px-4 rounded-full bg-gradient-to-tr from-teal-500 to-emerald-400 hover:from-teal-400 hover:to-emerald-300 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-[0_6px_20px_rgba(20,184,166,0.4)] active:scale-90 transition border border-slate-900 group relative"
-            >
-              <Camera className="w-4.5 h-4.5 stroke-[2.2]" />
-              <span>拍照收納</span>
-              {stagingCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white font-black shadow-md border border-slate-950 animate-pulse">
-                  {stagingCount}
-                </span>
-              )}
-            </button>
-          </div>
-        )}
-
         {/* Pure View Mode Quick Restore Pill (when pureViewMode is active) */}
         {pureViewMode && (
           <button
             onClick={() => setPureViewMode(false)}
-            title="退出純淨全螢幕檢視，還原工作盤與拍照快捷鈕"
-            className="fixed bottom-4 right-4 z-30 px-3 py-1.5 rounded-full bg-slate-900/90 border border-teal-500/40 text-teal-300 hover:text-white font-semibold text-xs shadow-xl flex items-center gap-1.5 backdrop-blur-md transition active:scale-95"
+            title="退出純淨全螢幕檢視，還原底部功能導航列"
+            className="fixed bottom-5 right-5 z-40 px-3.5 py-2 rounded-full bg-slate-900/95 border border-teal-500/50 text-teal-300 hover:text-white font-bold text-xs shadow-2xl flex items-center gap-1.5 backdrop-blur-md transition active:scale-95"
           >
-            <Eye className="w-3.5 h-3.5" />
+            <Eye className="w-4 h-4" />
             <span>退出純淨模式</span>
           </button>
         )}
@@ -650,7 +606,7 @@ export default function App() {
 
       {/* Floating Undo Toast Notification (避免誤刪，隨時可一鍵復原) */}
       {toastMessage && (
-        <div className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 border border-teal-500/70 text-slate-100 text-xs px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-3 backdrop-blur-md animate-fade-in max-w-sm w-full mx-auto">
+        <div className="fixed bottom-22 sm:bottom-18 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 border border-teal-500/70 text-slate-100 text-xs px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-3 backdrop-blur-md animate-fade-in max-w-sm w-full mx-auto">
           <span className="truncate flex-1 font-medium">{toastMessage}</span>
           {canUndo && (
             <button
@@ -670,16 +626,21 @@ export default function App() {
         </div>
       )}
 
-      {/* Mobile Bottom Navigation Desk */}
-      {showBottomDesk && (
+      {/* 常駐手機與平板底部導航列 (清晰切換功能，非純淨模式時常駐顯示) */}
+      {!pureViewMode && (
         <BottomNav
           activeTab={activeTab}
           onChangeTab={handleTabChange}
           onOpenBatchIntake={() => setIsBatchIntakeOpen(true)}
-          onCloseDesk={() => setShowBottomDesk(false)}
           expiringAlertCount={expiringCount}
           memoCount={memos.filter((m) => !m.isDone).length}
           stagingCount={stagingCount}
+          onOpenGallery={() => setIsGalleryOpen(true)}
+          onOpenAccountSpace={() => setIsAccountSpaceModalOpen(true)}
+          onOpenSearch={() => setIsVisualSearchOpen(true)}
+          onOpenGemini={() => setIsGeminiOpen(true)}
+          pureViewMode={pureViewMode}
+          onTogglePureViewMode={() => setPureViewMode((p) => !p)}
         />
       )}
 
