@@ -19,6 +19,7 @@ interface BottomNavProps {
   onCloseDesk?: () => void;
   expiringAlertCount: number;
   memoCount: number;
+  stagingCount?: number;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({
@@ -28,6 +29,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   onCloseDesk,
   expiringAlertCount,
   memoCount,
+  stagingCount = 0,
 }) => {
   const handleTabClick = (tab: ViewTab) => {
     onChangeTab(tab);
@@ -92,16 +94,23 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           </button>
 
           {/* 3. CENTER CAMERA ACTION */}
-          <button
-            onClick={() => {
-              onOpenBatchIntake();
-              if (onCloseDesk) onCloseDesk();
-            }}
-            title="拍照 / 多照片批次收納"
-            className="-mt-3 w-12 h-12 rounded-full bg-gradient-to-tr from-teal-500 to-emerald-400 text-slate-950 flex flex-col items-center justify-center shadow-[0_6px_18px_rgba(20,184,166,0.4)] active:scale-90 transition border border-slate-900"
-          >
-            <Camera className="w-5 h-5 stroke-[2.2]" />
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => {
+                onOpenBatchIntake();
+                if (onCloseDesk) onCloseDesk();
+              }}
+              title="拍照 / 拍照暫存區"
+              className="-mt-3 w-12 h-12 rounded-full bg-gradient-to-tr from-teal-500 to-emerald-400 text-slate-950 flex flex-col items-center justify-center shadow-[0_6px_18px_rgba(20,184,166,0.4)] active:scale-90 transition border border-slate-900"
+            >
+              <Camera className="w-5 h-5 stroke-[2.2]" />
+            </button>
+            {stagingCount > 0 && (
+              <span className="absolute -top-3.5 -right-1 px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white font-black shadow-md border border-slate-950 animate-pulse">
+                {stagingCount}
+              </span>
+            )}
+          </div>
 
           {/* 4. Tree Hierarchy */}
           <button

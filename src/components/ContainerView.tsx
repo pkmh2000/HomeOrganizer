@@ -62,6 +62,7 @@ interface ContainerViewProps {
   onExecuteTransfer?: (payload: TransferPayload) => void;
   openUnfiledDirectly?: boolean;
   onHandledUnfiledDirectly?: () => void;
+  stagingCount?: number;
 }
 
 export const ContainerView: React.FC<ContainerViewProps> = ({
@@ -81,6 +82,7 @@ export const ContainerView: React.FC<ContainerViewProps> = ({
   onExecuteTransfer,
   openUnfiledDirectly,
   onHandledUnfiledDirectly,
+  stagingCount = 0,
 }) => {
   const [filterQuery, setFilterQuery] = useState('');
   const [viewUnfiledOnly, setViewUnfiledOnly] = useState(false);
@@ -498,10 +500,16 @@ export const ContainerView: React.FC<ContainerViewProps> = ({
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={onOpenBatchIntake}
-            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 font-semibold text-xs border border-teal-500/30 flex items-center gap-1.5 transition active:scale-95"
+            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 font-semibold text-xs border border-teal-500/30 flex items-center gap-1.5 transition active:scale-95 relative"
+            title="開啟拍照暫存區"
           >
             <Camera className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">批次拍照</span>
+            <span className="hidden sm:inline">
+              批次拍照{stagingCount > 0 ? ` (暫存 ${stagingCount})` : ''}
+            </span>
+            {stagingCount > 0 && (
+              <span className="sm:hidden w-2 h-2 rounded-full bg-rose-500" />
+            )}
           </button>
           <button
             onClick={onOpenNewItem}

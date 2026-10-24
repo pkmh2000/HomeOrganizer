@@ -1,9 +1,10 @@
-import { InventoryNode, FamilyMemo, HouseholdData } from '../types';
+import { InventoryNode, FamilyMemo, HouseholdData, StagingDraftCard } from '../types';
 
 const STORAGE_KEY_NODES = 'homeorganizer_nodes_v2';
 const STORAGE_KEY_MEMOS = 'homeorganizer_memos_v2';
 const STORAGE_KEY_MEMBERS = 'homeorganizer_members_v2';
 const STORAGE_KEY_HOUSEHOLD_NAME = 'homeorganizer_hh_name_v2';
+const STORAGE_KEY_STAGING_DRAFTS = 'homeorganizer_staging_drafts_v2';
 
 export const DEFAULT_MEMBERS = ['全家', '爸爸', '媽媽', '大寶', '二寶'];
 
@@ -841,5 +842,35 @@ export function isAccessKeyValid(node: InventoryNode, inputKey?: string): boolea
     if (Date.now() <= expiryTime) return true;
   }
   return false;
+}
+
+// 拍照暫存區 (Photo Intake Staging Buffer) 持久化管理
+// 滿足使用者需求：拍照後保留於暫存區，下次進入仍可看到，編輯即時同步，並可多選/單選存入指定目的地
+export function loadStagingDrafts(): StagingDraftCard[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_STAGING_DRAFTS);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    console.error('Failed to load staging drafts', e);
+    return [];
+  }
+}
+
+export function saveStagingDrafts(drafts: StagingDraftCard[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_STAGING_DRAFTS, JSON.stringify(drafts));
+  } catch (e) {
+    console.error('Failed to save staging drafts', e);
+  }
+}
+
+export function clearStagingDrafts(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY_STAGING_DRAFTS);
+  } catch (e) {
+    console.error('Failed to clear staging drafts', e);
+  }
 }
 

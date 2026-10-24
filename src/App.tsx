@@ -16,6 +16,7 @@ import {
   saveActiveSpaceId,
   loadSpaces,
   isNodeUnfiled,
+  loadStagingDrafts,
 } from './utils/storage';
 import { useUndoHistory } from './hooks/useUndoHistory';
 import { Navbar } from './components/Navbar';
@@ -66,6 +67,7 @@ export default function App() {
   const [spaces, setSpaces] = useState<StorageSpace[]>(() => loadSpaces());
   const [unlockedContainerIds, setUnlockedContainerIds] = useState<Set<string>>(new Set());
   const [openUnfiledInbox, setOpenUnfiledInbox] = useState(false);
+  const [stagingCount, setStagingCount] = useState<number>(() => loadStagingDrafts().length);
 
   // Undo / Redo History Stack (at least 5 steps, supported up to 20 steps)
   const {
@@ -196,16 +198,22 @@ export default function App() {
   // Save new batch photos into current container or unfiled inbox
   const handleSaveBatchNodes = (
     newNodes: InventoryNode[],
-    targetPlacement: 'inbox' | 'current' = 'inbox'
+    targetDestinationId: string | null | 'inbox' = 'inbox'
   ) => {
-    recordHistory(nodes, `批次新增 ${newNodes.length} 張照片物件`);
+    recordHistory(nodes, `批次存入 ${newNodes.length} 張照片物件`);
     setNodes((prev) => [...prev, ...newNodes]);
     setActiveTab('containers');
     setShowBottomDesk(false);
 
-    if (targetPlacement === 'inbox') {
+    if (targetDestinationId === 'inbox') {
       setCurrentContainerId(null);
       setOpenUnfiledInbox(true);
+    } else if (targetDestinationId === 'root') {
+      setCurrentContainerId(null);
+      setOpenUnfiledInbox(false);
+    } else if (targetDestinationId && targetDestinationId !== 'current') {
+      setCurrentContainerId(targetDestinationId);
+      setOpenUnfiledInbox(false);
     }
   };
 
@@ -538,6 +546,7 @@ export default function App() {
             onExecuteTransfer={handleExecuteTransfer}
             openUnfiledDirectly={openUnfiledInbox}
             onHandledUnfiledDirectly={() => setOpenUnfiledInbox(false)}
+            stagingCount={stagingCount}
           />
         )}
 
@@ -612,11 +621,16 @@ export default function App() {
             {/* Right: Quick Camera Batch Photo Action */}
             <button
               onClick={() => setIsBatchIntakeOpen(true)}
-              title="拍照 / 多照片批次收納"
-              className="pointer-events-auto h-11 px-4 rounded-full bg-gradient-to-tr from-teal-500 to-emerald-400 hover:from-teal-400 hover:to-emerald-300 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-[0_6px_20px_rgba(20,184,166,0.4)] active:scale-90 transition border border-slate-900 group"
+              title="拍照 / 拍照暫存區"
+              className="pointer-events-auto h-11 px-4 rounded-full bg-gradient-to-tr from-teal-500 to-emerald-400 hover:from-teal-400 hover:to-emerald-300 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-[0_6px_20px_rgba(20,184,166,0.4)] active:scale-90 transition border border-slate-900 group relative"
             >
               <Camera className="w-4.5 h-4.5 stroke-[2.2]" />
               <span>拍照收納</span>
+              {stagingCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white font-black shadow-md border border-slate-950 animate-pulse">
+                  {stagingCount}
+                </span>
+              )}
             </button>
           </div>
         )}
@@ -665,6 +679,7 @@ export default function App() {
           onCloseDesk={() => setShowBottomDesk(false)}
           expiringAlertCount={expiringCount}
           memoCount={memos.filter((m) => !m.isDone).length}
+          stagingCount={stagingCount}
         />
       )}
 
@@ -675,7 +690,11 @@ export default function App() {
         onClose={() => setIsBatchIntakeOpen(false)}
         currentContainerId={currentContainerId}
         currentContainerName={currentContainerName}
+        allNodes={nodes}
+        spaces={spaces}
+        activeSpaceId={activeSpaceId}
         onSaveBatch={handleSaveBatchNodes}
+        onStagingCountChange={(count) => setStagingCount(count)}
       />
 
       {/* 2. Full Item/Container Edit Modal */}

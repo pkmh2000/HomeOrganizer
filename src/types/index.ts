@@ -66,6 +66,22 @@ export interface InventoryNode {
   updatedAt: string;
 }
 
+export interface StagingDraftCard {
+  id: string;
+  photoUrl: string;
+  name: string;
+  type: NodeType;
+  isPrivate: boolean;
+  quantity: number;
+  category?: string;
+  color?: string;
+  description?: string;
+  expirationDate?: string;
+  targetDestinationId?: string | null | 'inbox'; // custom per card if overridden
+  spaceId?: string;
+  createdAt?: string;
+}
+
 export interface FamilyMemo {
   id: string;
   title: string;

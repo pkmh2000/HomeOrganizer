@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Camera,
   Upload,
@@ -10,33 +10,33 @@ import {
   CheckCircle2,
   Lock,
   Sparkles,
-  RefreshCw,
   Inbox,
   Loader2,
+  CheckSquare,
+  Square,
+  FolderTree,
+  ChevronDown,
+  Info,
+  Calendar,
+  AlertCircle,
 } from 'lucide-react';
-import { InventoryNode, NodeType } from '../types';
-import { saveGalleryPhoto } from '../utils/storage';
+import { InventoryNode, NodeType, StorageSpace, StagingDraftCard } from '../types';
+import { saveGalleryPhoto, loadStagingDrafts, saveStagingDrafts, clearStagingDrafts } from '../utils/storage';
 import { compressImageFile } from '../utils/imageCompressor';
 
-interface BatchPhotoIntakeModalProps {
+export interface BatchPhotoIntakeModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentContainerId: string | null;
   currentContainerName: string;
-  onSaveBatch: (newNodes: InventoryNode[], targetPlacement?: 'inbox' | 'current') => void;
-}
-
-interface DraftCard {
-  id: string;
-  photoUrl: string;
-  name: string;
-  type: NodeType;
-  isPrivate: boolean;
-  quantity: number;
-  category?: string;
-  color?: string;
-  description?: string;
-  expirationDate?: string;
+  allNodes: InventoryNode[];
+  spaces?: StorageSpace[];
+  activeSpaceId?: string;
+  onSaveBatch: (
+    newNodes: InventoryNode[],
+    targetDestinationId: string | null | 'inbox'
+  ) => void;
+  onStagingCountChange?: (count: number) => void;
 }
 
 export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
@@ -44,26 +44,81 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
   onClose,
   currentContainerId,
   currentContainerName,
+  allNodes,
+  spaces = [],
+  activeSpaceId,
   onSaveBatch,
+  onStagingCountChange,
 }) => {
-  const [draftCards, setDraftCards] = useState<DraftCard[]>([]);
+  // Staging Draft Cards (persistent in localStorage)
+  const [draftCards, setDraftCards] = useState<StagingDraftCard[]>(() => loadStagingDrafts());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Destination Target: 'inbox' (default), 'current', 'root', or a container node ID
+  const [targetDestination, setTargetDestination] = useState<string>('inbox');
+
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [aiAnalysisProgress, setAiAnalysisProgress] = useState('');
   const [isProcessingPhotos, setIsProcessingPhotos] = useState(false);
-  // User requirement: 拍照後 應該先置放在 未歸檔收件匣
-  const [targetPlacement, setTargetPlacement] = useState<'inbox' | 'current'>('inbox');
+  const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Load drafts on initial open if state was empty
+  useEffect(() => {
+    if (isOpen) {
+      const stored = loadStagingDrafts();
+      setDraftCards(stored);
+      // Auto-select all existing drafts
+      setSelectedIds(new Set(stored.map((c) => c.id)));
+      if (onStagingCountChange) {
+        onStagingCountChange(stored.length);
+      }
+    }
+  }, [isOpen]);
+
+  // Persist draft cards to localStorage whenever they change (Real-time updates)
+  useEffect(() => {
+    saveStagingDrafts(draftCards);
+    if (onStagingCountChange) {
+      onStagingCountChange(draftCards.length);
+    }
+  }, [draftCards, onStagingCountChange]);
+
+  // Build hierarchical container tree for destination picker
+  const containerOptions = useMemo(() => {
+    const containers = allNodes.filter((n) => n.type === 'container');
+    const result: { id: string; name: string; depth: number }[] = [];
+
+    const buildTree = (parentId: string | null, depth: number) => {
+      const children = containers.filter((c) => c.parentId === parentId);
+      children.forEach((child) => {
+        result.push({
+          id: child.id,
+          name: child.name,
+          depth,
+        });
+        buildTree(child.id, depth + 1);
+      });
+    };
+
+    buildTree(null, 0);
+    return result;
+  }, [allNodes]);
+
   if (!isOpen) return null;
 
+  // Handle incoming camera or gallery photos
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setIsProcessingPhotos(true);
+    setFeedbackMsg(null);
 
     try {
       const fileArray = Array.from(files);
+      const newDrafts: StagingDraftCard[] = [];
+
       for (let i = 0; i < fileArray.length; i++) {
         const file = fileArray[i];
         try {
@@ -75,27 +130,37 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
           });
 
           const draftId = 'draft-' + Date.now() + '-' + i + '-' + Math.random().toString(36).substring(2, 6);
-          setDraftCards((prev) => [
-            ...prev,
-            {
-              id: draftId,
-              photoUrl: compressed,
-              name: `拍照物件 #${prev.length + 1}`,
-              type: 'item',
-              isPrivate: false,
-              quantity: 1,
-            },
-          ]);
+          newDrafts.push({
+            id: draftId,
+            photoUrl: compressed,
+            name: `拍照物件 #${draftCards.length + newDrafts.length + 1}`,
+            type: 'item',
+            isPrivate: false,
+            quantity: 1,
+            createdAt: new Date().toISOString(),
+          });
         } catch (err) {
           console.error('Error compressing camera photo:', err);
         }
+      }
+
+      if (newDrafts.length > 0) {
+        setDraftCards((prev) => [...prev, ...newDrafts]);
+        // Auto-select newly added photos
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          newDrafts.forEach((d) => next.add(d.id));
+          return next;
+        });
+        setFeedbackMsg(`📸 已新增 ${newDrafts.length} 張照片至拍照暫存區！`);
       }
     } finally {
       setIsProcessingPhotos(false);
     }
   };
 
-  const updateDraft = (id: string, updates: Partial<DraftCard>) => {
+  // Real-time Card Updating (Requirement 4: 拍照暫存區 內編輯的各物件內容為即時變更)
+  const updateDraft = (id: string, updates: Partial<StagingDraftCard>) => {
     setDraftCards((prev) =>
       prev.map((c) => (c.id === id ? { ...c, ...updates } : c))
     );
@@ -103,19 +168,57 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
 
   const removeDraft = (id: string) => {
     setDraftCards((prev) => prev.filter((c) => c.id !== id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   };
 
-  // Trigger Gemini AI Multi-Photo Analysis
+  const handleClearAllStaging = () => {
+    if (draftCards.length === 0) return;
+    if (window.confirm('確定要清空拍照暫存區的所有未存入照片嗎？')) {
+      setDraftCards([]);
+      setSelectedIds(new Set());
+      clearStagingDrafts();
+      setFeedbackMsg('拍照暫存區已清空');
+    }
+  };
+
+  // Selection toggles
+  const toggleSelectCard = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === draftCards.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(draftCards.map((c) => c.id)));
+    }
+  };
+
+  // Trigger Gemini AI Multi-Photo Analysis on selected or all cards
   const handleGeminiBatchAnalyze = async () => {
-    if (draftCards.length === 0 || isAiAnalyzing) return;
+    const targetCards = draftCards.filter((c) =>
+      selectedIds.size > 0 ? selectedIds.has(c.id) : true
+    );
+
+    if (targetCards.length === 0 || isAiAnalyzing) return;
     setIsAiAnalyzing(true);
     setAiAnalysisProgress('Gemini 正在辨識照片中...');
 
     try {
-      const updated = [...draftCards];
-      for (let i = 0; i < updated.length; i++) {
-        const card = updated[i];
-        setAiAnalysisProgress(`正在辨識第 ${i + 1} / ${updated.length} 張照片...`);
+      const cardMap = new Map<string, StagingDraftCard>(draftCards.map((c) => [c.id, c]));
+
+      for (let i = 0; i < targetCards.length; i++) {
+        const card = targetCards[i];
+        setAiAnalysisProgress(`正在辨識第 ${i + 1} / ${targetCards.length} 張照片...`);
 
         try {
           const res = await fetch('/api/gemini/analyze-photo', {
@@ -134,23 +237,26 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
               expiryStr = d.toISOString().split('T')[0];
             }
 
-            updated[i] = {
-              ...card,
-              name: data.name || card.name,
-              type: data.type === 'container' ? 'container' : 'item',
-              category: data.category || '一般物品',
-              color: data.color || '#0d9488',
-              description: data.description || '',
-              expirationDate: expiryStr,
-            };
+            const current = cardMap.get(card.id);
+            if (current) {
+              cardMap.set(card.id, {
+                ...current,
+                name: data.name || current.name,
+                type: data.type === 'container' ? 'container' : 'item',
+                category: data.category || '一般物品',
+                color: data.color || '#0d9488',
+                description: data.description || '',
+                expirationDate: expiryStr,
+              });
+            }
           }
         } catch (itemErr) {
           console.warn('Failed item Gemini analysis', itemErr);
         }
       }
 
-      setDraftCards(updated);
-      setAiAnalysisProgress('Gemini AI 辨識完成！');
+      setDraftCards(Array.from(cardMap.values()));
+      setAiAnalysisProgress('✨ Gemini AI 辨識完成！');
     } catch (err) {
       console.error('Batch analyze error:', err);
     } finally {
@@ -159,16 +265,15 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
     }
   };
 
-  const handleFinish = () => {
-    if (draftCards.length === 0) {
-      onClose();
-      return;
-    }
+  // Requirement 1 & 2: 儲存目的地可選，按 "確定存入" 才依所選存入儲存目的地，未選取者保留在暫存區
+  const handleDepositSelected = () => {
+    const selectedCards = draftCards.filter((c) => selectedIds.has(c.id));
+    if (selectedCards.length === 0) return;
 
     const now = new Date().toISOString();
 
-    // Also persist photos into photo gallery library for future reuse
-    draftCards.forEach((draft) => {
+    // Persist photos into gallery library
+    selectedCards.forEach((draft) => {
       if (draft.photoUrl) {
         saveGalleryPhoto({
           id: 'gal-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
@@ -180,14 +285,32 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
       }
     });
 
-    const isInbox = targetPlacement === 'inbox';
-    const createdNodes: InventoryNode[] = draftCards.map((draft, idx) => ({
+    // Determine target parent container ID and archived state
+    let targetParentId: string | null = null;
+    let isArchived = true;
+
+    if (targetDestination === 'inbox') {
+      targetParentId = null;
+      isArchived = false; // placed in unfiled inbox
+    } else if (targetDestination === 'current') {
+      targetParentId = currentContainerId;
+      isArchived = true;
+    } else if (targetDestination === 'root') {
+      targetParentId = null;
+      isArchived = true;
+    } else {
+      // Specific container node ID
+      targetParentId = targetDestination;
+      isArchived = true;
+    }
+
+    const createdNodes: InventoryNode[] = selectedCards.map((draft, idx) => ({
       id: 'node-' + Date.now() + '-' + idx + '-' + Math.random().toString(36).substring(2, 7),
-      parentId: isInbox ? null : currentContainerId,
+      parentId: targetParentId,
       type: draft.type,
       name: draft.name.trim() || (draft.type === 'container' ? '未命名收納盒' : '未命名物品'),
       isPrivate: draft.isPrivate,
-      isArchived: !isInbox, // if inbox => false (placed in unfiled inbox for quick batch archiving)
+      isArchived: isArchived,
       photos: draft.photoUrl ? [draft.photoUrl] : [],
       quantity: draft.quantity || 1,
       unit: draft.type === 'container' ? '個' : '件',
@@ -203,9 +326,32 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
       updatedAt: now,
     }));
 
-    onSaveBatch(createdNodes, targetPlacement);
-    setDraftCards([]);
-    onClose();
+    // Commit only selected nodes
+    onSaveBatch(createdNodes, targetDestination);
+
+    // Remove only the deposited cards from staging buffer, keeping remaining cards
+    const remainingCards = draftCards.filter((c) => !selectedIds.has(c.id));
+    setDraftCards(remainingCards);
+    setSelectedIds(new Set(remainingCards.map((c) => c.id)));
+
+    // Provide friendly status update
+    const targetLabel =
+      targetDestination === 'inbox'
+        ? '未歸檔收件匣'
+        : targetDestination === 'current'
+        ? currentContainerName
+        : targetDestination === 'root'
+        ? '全家總覽 (頂層)'
+        : allNodes.find((n) => n.id === targetDestination)?.name || '指定容器';
+
+    if (remainingCards.length > 0) {
+      setFeedbackMsg(`✅ 已成功存入 ${selectedCards.length} 項至「${targetLabel}」！暫存區尚保留 ${remainingCards.length} 項。`);
+    } else {
+      setFeedbackMsg(`🎉 已全數存入 ${selectedCards.length} 項至「${targetLabel}」！`);
+      setTimeout(() => {
+        onClose();
+      }, 700);
+    }
   };
 
   // Quick preset sample photos
@@ -224,18 +370,29 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
     </svg>`;
     const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 
-    setDraftCards((prev) => [
-      ...prev,
-      {
-        id: 'draft-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-        photoUrl: dataUri,
-        name: label,
-        type: 'item',
-        isPrivate: false,
-        quantity: 1,
-      },
-    ]);
+    const newId = 'draft-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+    const newDraft: StagingDraftCard = {
+      id: newId,
+      photoUrl: dataUri,
+      name: label,
+      type: 'item',
+      isPrivate: false,
+      quantity: 1,
+      createdAt: new Date().toISOString(),
+    };
+
+    setDraftCards((prev) => [...prev, newDraft]);
+    setSelectedIds((prev) => new Set([...prev, newId]));
   };
+
+  // Get current target label
+  const destinationTitle = useMemo(() => {
+    if (targetDestination === 'inbox') return '📥 未歸檔收件匣';
+    if (targetDestination === 'current') return `📦 ${currentContainerName}`;
+    if (targetDestination === 'root') return '🏠 全家總覽空間 (頂層)';
+    const found = allNodes.find((n) => n.id === targetDestination);
+    return found ? `📦 ${found.name}` : '自選目的地容器';
+  }, [targetDestination, currentContainerName, allNodes]);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 backdrop-blur-md">
@@ -260,80 +417,147 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
       {/* Header */}
       <div className="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
         <div>
-          <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-            <Camera className="w-5 h-5 text-teal-400" />
-            快速多照片批次收納
-          </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            拍完後先置入收件匣，稍後可多選批次歸檔至容器
-          </p>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-teal-500/20 text-teal-400 flex items-center justify-center">
+              <Camera className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-sm sm:text-base font-bold text-slate-100 flex items-center gap-2">
+                <span>拍照暫存區</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-teal-500/20 text-teal-300 border border-teal-500/30 font-mono">
+                  暫存保留 {draftCards.length} 項
+                </span>
+              </h2>
+              <p className="text-[11px] text-slate-400">
+                可連續拍照保留暫存，多選/單選後一鍵存入指定目的地
+              </p>
+            </div>
+          </div>
         </div>
-        <button
-          onClick={onClose}
-          className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
-        >
-          <X className="w-5 h-5" />
-        </button>
-      </div>
-
-      {/* Destination Selector (User request: 拍照後 應該先置放在 未歸檔收件匣) */}
-      <div className="px-4 py-2.5 bg-slate-950/80 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
-        <span className="text-slate-400 font-semibold flex items-center gap-1.5">
-          <span>儲存目的地：</span>
-        </span>
-        <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
-          <button
-            type="button"
-            onClick={() => setTargetPlacement('inbox')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
-              targetPlacement === 'inbox'
-                ? 'bg-amber-500 text-slate-950 shadow-md'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Inbox className="w-3.5 h-3.5" />
-            <span>📥 未歸檔收件匣 (預設)</span>
-          </button>
-          {currentContainerId && (
+        <div className="flex items-center gap-2">
+          {draftCards.length > 0 && (
             <button
-              type="button"
-              onClick={() => setTargetPlacement('current')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
-                targetPlacement === 'current'
-                  ? 'bg-teal-500 text-slate-950 shadow-md'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
+              onClick={handleClearAllStaging}
+              className="text-xs text-rose-400 hover:text-rose-300 px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/20 transition"
+              title="清空拍照暫存區"
             >
-              <Box className="w-3.5 h-3.5" />
-              <span>📦 {currentContainerName}</span>
+              清空暫存
             </button>
           )}
+          <button
+            onClick={onClose}
+            title="關閉 (暫存照片將安全保留)"
+            className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white transition"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
       </div>
 
-      {/* Photo Compression / Loading Banner */}
+      {/* 儲存目的地可選區塊 (Requirements 1 & 2) */}
+      <div className="px-4 py-3 bg-slate-900/90 border-b border-slate-800 flex flex-col gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-1.5 font-bold text-slate-300">
+            <Layers className="w-4 h-4 text-teal-400" />
+            <span>儲存目的地：</span>
+          </div>
+
+          {/* Quick presets */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setTargetDestination('inbox')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition ${
+                targetDestination === 'inbox'
+                  ? 'bg-amber-500 text-slate-950 font-bold shadow-md'
+                  : 'bg-slate-800 text-slate-300 hover:text-white border border-slate-700'
+              }`}
+            >
+              <Inbox className="w-3.5 h-3.5" />
+              <span>📥 未歸檔收件匣 (預設)</span>
+            </button>
+
+            {currentContainerId && (
+              <button
+                type="button"
+                onClick={() => setTargetDestination('current')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition ${
+                  targetDestination === 'current'
+                    ? 'bg-teal-500 text-slate-950 font-bold shadow-md'
+                    : 'bg-slate-800 text-slate-300 hover:text-white border border-slate-700'
+                }`}
+              >
+                <Box className="w-3.5 h-3.5" />
+                <span>📍 當前: {currentContainerName}</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Full Hierarchical Destination Dropdown (空間 / 容器 / 隔層可選) */}
+        <div className="relative">
+          <select
+            value={targetDestination}
+            onChange={(e) => setTargetDestination(e.target.value)}
+            className="w-full pl-3 pr-8 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-100 font-medium focus:outline-none focus:border-teal-500 transition appearance-none cursor-pointer"
+          >
+            <option value="inbox">📥 未歸檔收件匣 (先集中存放，待日後細部歸檔)</option>
+            {currentContainerId && (
+              <option value="current">📍 當前所在容器：{currentContainerName}</option>
+            )}
+            <option value="root">🏠 全家總覽空間 (頂層獨立容器/物件)</option>
+            {containerOptions.length > 0 && (
+              <optgroup label="── 選擇空間隔層與收納容器 ──">
+                {containerOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {'\u00A0'.repeat(opt.depth * 3)}
+                    {opt.depth > 0 ? '└ 🗄️ ' : '📦 '}
+                    {opt.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+        </div>
+      </div>
+
+      {/* Status & Feedback Toast Banner */}
+      {feedbackMsg && (
+        <div className="bg-teal-950/90 border-b border-teal-500/40 px-4 py-2 text-xs text-teal-200 flex items-center justify-between animate-in fade-in">
+          <span>{feedbackMsg}</span>
+          <button
+            onClick={() => setFeedbackMsg(null)}
+            className="text-teal-400 hover:text-teal-200 text-xs ml-2 font-bold"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Photo Compression Loading Banner */}
       {isProcessingPhotos && (
-        <div className="bg-teal-950/80 border-b border-teal-500/40 px-4 py-2 text-xs text-teal-300 flex items-center gap-2">
-          <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
+        <div className="bg-sky-950/90 border-b border-sky-500/40 px-4 py-2 text-xs text-sky-200 flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin text-sky-400" />
           <span>正在壓縮處理相機照片並優化儲存體積...</span>
         </div>
       )}
 
-      {/* Photo Capture Triggers & Gemini AI Button */}
-      <div className="p-3.5 bg-slate-900/50 border-b border-slate-800 flex flex-wrap items-center gap-2">
+      {/* Continuous Photo Triggers & Multi-Selection Action Bar */}
+      <div className="p-3.5 bg-slate-900/60 border-b border-slate-800 flex flex-wrap items-center gap-2">
         <button
           onClick={() => cameraInputRef.current?.click()}
-          className="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 transition"
+          className="flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 transition"
         >
           <Camera className="w-4 h-4" />
-          <span>相機拍照</span>
+          <span>連續拍照輸入</span>
         </button>
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold text-xs border border-slate-700 active:scale-95 transition"
+          className="flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold text-xs border border-slate-700 active:scale-95 transition"
         >
           <Upload className="w-4 h-4 text-teal-400" />
-          <span>多張照片</span>
+          <span>選取照片檔案</span>
         </button>
 
         {/* Gemini AI Auto-Recognize Button */}
@@ -347,32 +571,60 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
             <span>
               {isAiAnalyzing
                 ? aiAnalysisProgress || 'Gemini 正在分析中...'
-                : `✨ Gemini AI 一鍵智能辨識 (${draftCards.length} 張照片)`}
+                : `✨ Gemini AI 智能辨識 (${selectedIds.size > 0 ? `已選 ${selectedIds.size} 張` : `全部 ${draftCards.length} 張`})`}
             </span>
           </button>
         )}
       </div>
 
-      {/* Draft Cards Grid */}
+      {/* Staging Selection Tools */}
+      {draftCards.length > 0 && (
+        <div className="px-4 py-2 bg-slate-900/40 border-b border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleSelectAll}
+              className="flex items-center gap-1.5 text-teal-400 hover:text-teal-300 font-semibold transition"
+            >
+              {selectedIds.size === draftCards.length ? (
+                <CheckSquare className="w-4 h-4 text-teal-400" />
+              ) : (
+                <Square className="w-4 h-4 text-slate-500" />
+              )}
+              <span>
+                {selectedIds.size === draftCards.length ? '取消全選' : '全選全部'}
+              </span>
+            </button>
+            <span>
+              已選取 <strong className="text-teal-300 font-bold">{selectedIds.size}</strong> / {draftCards.length} 項
+            </span>
+          </div>
+
+          <span className="text-[11px] text-slate-500 hidden sm:inline">
+            💡 暫存區資料關閉後自動保存，下次進入依然保留
+          </span>
+        </div>
+      )}
+
+      {/* Staging Draft Cards List (Real-time updates) */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {draftCards.length === 0 ? (
           <div className="py-12 text-center text-slate-500 flex flex-col items-center">
-            <div className="w-16 h-16 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center mb-3 text-teal-400">
+            <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-3 text-teal-400 shadow-inner">
               <Camera className="w-8 h-8" />
             </div>
-            <p className="text-sm font-semibold text-slate-300">尚未載入照片</p>
-            <p className="text-xs text-slate-400 max-w-xs mt-1">
-              點擊上方「拍照」或「選取照片」，可利用 <strong>Gemini AI</strong> 自動辨識物品名稱、分類並切換為容器或物件。
+            <p className="text-sm font-semibold text-slate-200">拍照暫存區目前為空</p>
+            <p className="text-xs text-slate-400 max-w-sm mt-1 leading-relaxed">
+              點選上方「連續拍照輸入」或「選取照片檔案」。在此暫存區可連續拍照、自由編輯名稱與類型，<strong>不會隨意遺失</strong>。隨時可勾選單一或多項，點選下方「確認存入」放入指定目的地。
             </p>
 
-            {/* Quick Demo Photo Buttons */}
+            {/* Quick Demo Sample Buttons */}
             <div className="mt-6 flex flex-wrap gap-2 justify-center max-w-xs">
-              <span className="text-[11px] text-slate-500 w-full">快速體驗（加入範例照片）：</span>
+              <span className="text-[11px] text-slate-500 w-full font-medium">快速載入範例體驗：</span>
               <button
-                onClick={() => addSamplePhotoDraft('藍色抽屜收納盒', '📦')}
+                onClick={() => addSamplePhotoDraft('客廳電視遙控器', '📺')}
                 className="px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs hover:text-teal-400 border border-slate-700"
               >
-                + 📦 藍色收納盒
+                + 📺 電視遙控器
               </button>
               <button
                 onClick={() => addSamplePhotoDraft('抗藍光護目眼鏡', '👓')}
@@ -381,147 +633,190 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
                 + 👓 護目眼鏡
               </button>
               <button
-                onClick={() => addSamplePhotoDraft('戶外露營手電筒', '🔦')}
+                onClick={() => addSamplePhotoDraft('電視櫃第二層收納隔盒', '📦')}
                 className="px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs hover:text-teal-400 border border-slate-700"
               >
-                + 🔦 露營手電筒
+                + 📦 收納隔盒
               </button>
             </div>
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs text-slate-400 px-1">
-              <span>已載入 <strong>{draftCards.length}</strong> 張照片（點上方按鈕可由 Gemini 自動辨識）</span>
-              <button
-                onClick={() => setDraftCards([])}
-                className="text-rose-400 hover:text-rose-300 text-xs"
-              >
-                全部清除
-              </button>
-            </div>
-
-            {draftCards.map((card, idx) => (
-              <div
-                key={card.id}
-                className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 flex gap-3 items-start shadow-md"
-              >
-                {/* Photo Thumbnail */}
-                <div className="w-20 h-20 rounded-xl overflow-hidden bg-slate-800 shrink-0 border border-slate-700/60 relative">
-                  <img src={card.photoUrl} alt="" className="w-full h-full object-cover" />
-                  <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[10px] bg-black/75 text-white font-mono">
-                    #{idx + 1}
-                  </span>
-                </div>
-
-                {/* Editable Details */}
-                <div className="flex-1 min-w-0 space-y-2">
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="text"
-                      value={card.name}
-                      onChange={(e) => updateDraft(card.id, { name: e.target.value })}
-                      placeholder="物品或容器名稱..."
-                      className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-xs font-semibold focus:outline-none focus:border-teal-500"
-                    />
-                    {card.category && (
-                      <span
-                        className="px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0 text-white"
-                        style={{ backgroundColor: card.color || '#0d9488' }}
-                      >
-                        {card.category}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Switch Container vs Item */}
-                  <div className="flex items-center gap-2">
-                    <div className="flex rounded-lg bg-slate-800 p-0.5 text-xs">
-                      <button
-                        onClick={() => updateDraft(card.id, { type: 'item' })}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-md transition ${
-                          card.type === 'item'
-                            ? 'bg-teal-500 text-slate-950 font-bold'
-                            : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        <Box className="w-3.5 h-3.5" />
-                        <span>物件</span>
-                      </button>
-                      <button
-                        onClick={() => updateDraft(card.id, { type: 'container' })}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-md transition ${
-                          card.type === 'container'
-                            ? 'bg-indigo-600 text-white font-bold'
-                            : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        <Layers className="w-3.5 h-3.5" />
-                        <span>轉為容器 📦</span>
-                      </button>
-                    </div>
-
-                    {/* Quantity */}
-                    <div className="flex items-center gap-1 bg-slate-800 px-2 py-1 rounded-lg text-xs text-slate-300">
-                      <span>數量:</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={card.quantity}
-                        onChange={(e) =>
-                          updateDraft(card.id, { quantity: Math.max(1, parseInt(e.target.value) || 1) })
-                        }
-                        className="w-10 bg-transparent text-center text-teal-400 font-bold focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Description / Note if Gemini identified */}
-                  {card.description && (
-                    <p className="text-[11px] text-slate-400 line-clamp-1 italic">
-                      ✨ {card.description}
-                    </p>
-                  )}
-
-                  {/* Private toggle & delete */}
-                  <div className="flex items-center justify-between text-xs pt-1">
-                    <label className="flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-slate-200">
-                      <input
-                        type="checkbox"
-                        checked={card.isPrivate}
-                        onChange={(e) => updateDraft(card.id, { isPrivate: e.target.checked })}
-                        className="rounded border-slate-700 text-rose-500 focus:ring-0"
-                      />
-                      <Lock className="w-3 h-3 text-slate-400" />
-                      <span>設為私人</span>
-                    </label>
-
+            {draftCards.map((card, idx) => {
+              const isSelected = selectedIds.has(card.id);
+              return (
+                <div
+                  key={card.id}
+                  className={`p-3.5 rounded-2xl border transition-all flex gap-3 items-start shadow-md ${
+                    isSelected
+                      ? 'bg-slate-900/95 border-teal-500/60 ring-1 ring-teal-500/40'
+                      : 'bg-slate-900/50 border-slate-800 opacity-75'
+                  }`}
+                >
+                  {/* Select Checkbox & Thumbnail */}
+                  <div className="flex flex-col items-center gap-2 shrink-0">
                     <button
-                      onClick={() => removeDraft(card.id)}
-                      className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-slate-800"
+                      type="button"
+                      onClick={() => toggleSelectCard(card.id)}
+                      className="p-1 rounded-lg hover:bg-slate-800 transition"
+                      title={isSelected ? '取消勾選' : '勾選此項'}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      {isSelected ? (
+                        <CheckSquare className="w-5 h-5 text-teal-400" />
+                      ) : (
+                        <Square className="w-5 h-5 text-slate-600" />
+                      )}
                     </button>
+
+                    <div className="w-20 h-20 rounded-xl overflow-hidden bg-slate-800 shrink-0 border border-slate-700/60 relative">
+                      <img src={card.photoUrl} alt="" className="w-full h-full object-cover" />
+                      <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[10px] bg-black/75 text-white font-mono">
+                        #{idx + 1}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Editable Details (Real-time updates) */}
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={card.name}
+                        onChange={(e) => updateDraft(card.id, { name: e.target.value })}
+                        placeholder="物品或容器名稱..."
+                        className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-xs font-semibold focus:outline-none focus:border-teal-500"
+                      />
+                      {card.category && (
+                        <span
+                          className="px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0 text-white"
+                          style={{ backgroundColor: card.color || '#0d9488' }}
+                        >
+                          {card.category}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Switch Container vs Item */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex rounded-lg bg-slate-800 p-0.5 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => updateDraft(card.id, { type: 'item' })}
+                          className={`flex items-center gap-1 px-2 py-0.8 rounded-md transition ${
+                            card.type === 'item'
+                              ? 'bg-teal-500 text-slate-950 font-bold'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Box className="w-3.5 h-3.5" />
+                          <span>物件</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateDraft(card.id, { type: 'container' })}
+                          className={`flex items-center gap-1 px-2 py-0.8 rounded-md transition ${
+                            card.type === 'container'
+                              ? 'bg-indigo-600 text-white font-bold'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Layers className="w-3.5 h-3.5" />
+                          <span>轉為隔層/容器 📦</span>
+                        </button>
+                      </div>
+
+                      {/* Quantity */}
+                      <div className="flex items-center gap-1 bg-slate-800 px-2 py-1 rounded-lg text-xs text-slate-300">
+                        <span>數量:</span>
+                        <input
+                          type="number"
+                          min="1"
+                          value={card.quantity}
+                          onChange={(e) =>
+                            updateDraft(card.id, {
+                              quantity: Math.max(1, parseInt(e.target.value) || 1),
+                            })
+                          }
+                          className="w-10 bg-transparent text-center text-teal-400 font-bold focus:outline-none"
+                        />
+                      </div>
+
+                      {/* Expiration Date if any */}
+                      {card.expirationDate && (
+                        <div className="flex items-center gap-1 text-[11px] text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                          <Calendar className="w-3 h-3" />
+                          <span>到期: {card.expirationDate}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Description / Note if Gemini identified or manually added */}
+                    {card.description && (
+                      <p className="text-[11px] text-slate-400 line-clamp-1 italic">
+                        ✨ {card.description}
+                      </p>
+                    )}
+
+                    {/* Private toggle & delete */}
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800/80">
+                      <label className="flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={card.isPrivate}
+                          onChange={(e) => updateDraft(card.id, { isPrivate: e.target.checked })}
+                          className="rounded border-slate-700 text-rose-500 focus:ring-0"
+                        />
+                        <Lock className="w-3 h-3 text-slate-400" />
+                        <span>設為私人</span>
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={() => removeDraft(card.id)}
+                        className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition"
+                        title="自暫存區移除此張"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* Footer */}
-      <div className="p-4 bg-slate-900 border-t border-slate-800 pb-8 flex items-center justify-between">
-        <span className="text-xs text-slate-400">
-          詳細屬性可於日後隨時點選補齊。
-        </span>
-        <button
-          onClick={handleFinish}
-          disabled={draftCards.length === 0}
-          className="px-5 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 disabled:bg-slate-800 text-slate-950 font-bold text-sm flex items-center gap-2 shadow-lg active:scale-95 transition"
-        >
-          <CheckCircle2 className="w-4 h-4" />
-          <span>確認存入 ({draftCards.length})</span>
-        </button>
+      {/* Footer / Confirm Deposit Actions */}
+      <div className="p-4 bg-slate-900 border-t border-slate-800 pb-8 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="text-xs text-slate-400 text-center sm:text-left">
+          <span>
+            目的地：<strong className="text-teal-300">{destinationTitle}</strong>
+          </span>
+          <p className="text-[11px] text-slate-500">
+            按下確定存入後，僅會存入勾選的項目，未勾選項目繼續保留在暫存區。
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
+          >
+            保留暫存並關閉
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDepositSelected}
+            disabled={selectedIds.size === 0}
+            className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-400 hover:from-teal-400 hover:to-emerald-300 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-600 text-slate-950 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg active:scale-95 transition"
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            <span>確定存入 (已選 {selectedIds.size} 項)</span>
+          </button>
+        </div>
       </div>
     </div>
   );
