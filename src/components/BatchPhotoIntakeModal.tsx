@@ -425,11 +425,11 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
               <h2 className="text-sm sm:text-base font-bold text-slate-100 flex items-center gap-2">
                 <span>拍照暫存區</span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] bg-teal-500/20 text-teal-300 border border-teal-500/30 font-mono">
-                  暫存保留 {draftCards.length} 項
+                  {draftCards.length > 0 ? `暫存保留 ${draftCards.length} 項` : '暫存區為空'}
                 </span>
               </h2>
               <p className="text-[11px] text-slate-400">
-                可連續拍照保留暫存，多選/單選後一鍵存入指定目的地
+                拍照後自動保留於暫存區（不離開畫面），可連續拍照累積，勾選後存入目的地
               </p>
             </div>
           </div>
@@ -549,15 +549,15 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
           onClick={() => cameraInputRef.current?.click()}
           className="flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md active:scale-95 transition"
         >
-          <Camera className="w-4 h-4" />
-          <span>連續拍照輸入</span>
+          <Camera className="w-4 h-4 stroke-[2.2]" />
+          <span>拍照</span>
         </button>
         <button
           onClick={() => fileInputRef.current?.click()}
           className="flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold text-xs border border-slate-700 active:scale-95 transition"
         >
           <Upload className="w-4 h-4 text-teal-400" />
-          <span>選取照片檔案</span>
+          <span>選取相簿照片</span>
         </button>
 
         {/* Gemini AI Auto-Recognize Button */}
@@ -614,7 +614,7 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
             </div>
             <p className="text-sm font-semibold text-slate-200">拍照暫存區目前為空</p>
             <p className="text-xs text-slate-400 max-w-sm mt-1 leading-relaxed">
-              點選上方「連續拍照輸入」或「選取照片檔案」。在此暫存區可連續拍照、自由編輯名稱與類型，<strong>不會隨意遺失</strong>。隨時可勾選單一或多項，點選下方「確認存入」放入指定目的地。
+              點選上方「拍照」或「選取相簿照片」。每次拍攝的照片都會保留在此暫存區，編輯即時生效，<strong>不會隨意遺失</strong>。隨時可勾選單一或多項，點選下方「確認存入」放入指定目的地。
             </p>
 
             {/* Quick Demo Sample Buttons */}
