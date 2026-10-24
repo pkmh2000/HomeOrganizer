@@ -27,6 +27,10 @@ import {
   Archive,
   Shield,
   FolderInput,
+  Star,
+  ChevronLeft,
+  ChevronRight,
+  Maximize2,
 } from 'lucide-react';
 import { InventoryNode, Tag, NodeType, LoanStatus } from '../types';
 import { TAG_PALETTE, DEFAULT_MEMBERS } from '../utils/storage';
@@ -64,6 +68,7 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
   const [customTagColor, setCustomTagColor] = useState('#0d9488');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGalleryPickerOpen, setIsGalleryPickerOpen] = useState(false);
+  const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
 
   const handleAnalyzeWithGemini = async () => {
     const photo = formData.photos && formData.photos[0];
@@ -193,6 +198,38 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
         photos: (prev.photos || []).filter((_, i) => i !== index),
       }));
     }
+  };
+
+  // 指定哪一張為封面 (移動至第 0 位作為主封面照)
+  const setCoverPhoto = (index: number) => {
+    if (index === 0) return;
+    setFormData((prev) => {
+      const current = prev.photos || [];
+      if (index < 0 || index >= current.length) return prev;
+      const target = current[index];
+      const remaining = current.filter((_, i) => i !== index);
+      return {
+        ...prev,
+        photos: [target, ...remaining],
+      };
+    });
+  };
+
+  // 調整照片順序位置 (前移 / 後移)
+  const movePhoto = (index: number, direction: 'left' | 'right', isReceipt = false) => {
+    setFormData((prev) => {
+      const key = isReceipt ? 'receiptPhotos' : 'photos';
+      const current = [...(prev[key] || [])];
+      const targetIndex = direction === 'left' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= current.length) return prev;
+      const temp = current[index];
+      current[index] = current[targetIndex];
+      current[targetIndex] = temp;
+      return {
+        ...prev,
+        [key]: current,
+      };
+    });
   };
 
   const toggleTag = (paletteItem: { name: string; color: string }) => {
@@ -425,7 +462,7 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                     <Camera className="w-4 h-4 text-teal-400" />
-                    <span>物品照片 (第一張為主封面照，可上傳多張)</span>
+                    <span>物品照片 ({formData.photos?.length || 0} 張 · 第一張為展示封面，可左右調換位置或指定封面)</span>
                   </label>
                   <div className="flex items-center gap-2">
                     <button
@@ -446,28 +483,95 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
                   </div>
                 </div>
 
-                <div className="flex gap-2.5 overflow-x-auto pb-2 no-scrollbar">
+                {/* Photo Cards with Reorder & Cover Settings */}
+                <div className="flex gap-2.5 overflow-x-auto pb-2.5 pt-1 no-scrollbar">
                   {formData.photos && formData.photos.length > 0 ? (
-                    formData.photos.map((pUrl, idx) => (
-                      <div
-                        key={idx}
-                        className="relative w-24 h-24 rounded-xl overflow-hidden bg-slate-800 border border-slate-700 shrink-0 group"
-                      >
-                        <img src={pUrl} alt="" className="w-full h-full object-cover" />
-                        {idx === 0 && (
-                          <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[9px] bg-teal-500 text-slate-950 font-bold">
-                            封面
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => removePhoto(idx, false)}
-                          className="absolute top-1 right-1 p-1 rounded-md bg-black/75 text-rose-400 hover:bg-rose-500 hover:text-white transition"
+                    formData.photos.map((pUrl, idx) => {
+                      const isCover = idx === 0;
+                      return (
+                        <div
+                          key={idx}
+                          className={`relative w-28 sm:w-32 rounded-2xl overflow-hidden bg-slate-900 border transition-all shrink-0 flex flex-col shadow-md ${
+                            isCover
+                              ? 'border-teal-400 ring-2 ring-teal-500/40'
+                              : 'border-slate-800 hover:border-slate-700'
+                          }`}
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))
+                          {/* Image Box */}
+                          <div
+                            onClick={() => setPreviewPhotoUrl(pUrl)}
+                            className="relative w-full h-24 bg-slate-950 cursor-pointer group"
+                            title="點擊放大預覽照片"
+                          >
+                            <img src={pUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition duration-200" />
+
+                            {/* Cover Badge / Set as Cover Button */}
+                            <div className="absolute top-1.5 left-1.5" onClick={(e) => e.stopPropagation()}>
+                              {isCover ? (
+                                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] bg-gradient-to-r from-teal-400 to-emerald-400 text-slate-950 font-black shadow-sm">
+                                  <Star className="w-2.5 h-2.5 fill-slate-950 stroke-[2.5]" />
+                                  <span>主封面</span>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setCoverPhoto(idx)}
+                                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] bg-slate-900/90 hover:bg-teal-500 text-slate-300 hover:text-slate-950 font-bold border border-slate-750 transition active:scale-95 shadow-sm"
+                                  title="設為第 1 張主封面照"
+                                >
+                                  <Star className="w-2.5 h-2.5" />
+                                  <span>設封面</span>
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Top Right: Delete Button */}
+                            <div className="absolute top-1.5 right-1.5" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                type="button"
+                                onClick={() => removePhoto(idx, false)}
+                                className="p-1 rounded-md bg-slate-900/85 text-rose-400 hover:bg-rose-500 hover:text-white transition shadow"
+                                title="刪除照片"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+
+                            {/* Bottom Index badge */}
+                            <div className="absolute bottom-1 left-1.5 px-1 py-0.2 rounded text-[9px] bg-black/75 text-slate-300 font-mono pointer-events-none">
+                              #{idx + 1}
+                            </div>
+                            <div className="absolute bottom-1 right-1.5 p-0.5 rounded text-white bg-black/75 opacity-0 group-hover:opacity-100 transition pointer-events-none">
+                              <Maximize2 className="w-2.5 h-2.5" />
+                            </div>
+                          </div>
+
+                          {/* Reorder Position Controls (前移 / 後移) */}
+                          <div className="p-1 bg-slate-850 border-t border-slate-800 flex items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => movePhoto(idx, 'left', false)}
+                              className="flex-1 py-1 rounded bg-slate-800 hover:bg-slate-750 disabled:opacity-20 disabled:hover:bg-slate-800 text-teal-400 font-bold text-[10px] flex items-center justify-center gap-0.5 transition active:scale-95"
+                              title="向左前移順序"
+                            >
+                              <ChevronLeft className="w-3 h-3" />
+                              <span>前移</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === (formData.photos?.length || 1) - 1}
+                              onClick={() => movePhoto(idx, 'right', false)}
+                              className="flex-1 py-1 rounded bg-slate-800 hover:bg-slate-750 disabled:opacity-20 disabled:hover:bg-slate-800 text-teal-400 font-bold text-[10px] flex items-center justify-center gap-0.5 transition active:scale-95"
+                              title="向右後移順序"
+                            >
+                              <span>後移</span>
+                              <ChevronRight className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
                   ) : (
                     <div
                       onClick={() => photoInputRef.current?.click()}
@@ -475,7 +579,7 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
                     >
                       <Camera className="w-8 h-8 mb-2" />
                       <span className="text-xs font-semibold">點此拍照或選取照片</span>
-                      <span className="text-[11px] text-slate-500 mt-0.5">最少可先填寫名稱，照片日後補齊</span>
+                      <span className="text-[11px] text-slate-500 mt-0.5">可新增多張照片，隨時指定封面與調整順序</span>
                     </div>
                   )}
                 </div>
@@ -933,21 +1037,55 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
                   </button>
                 </div>
 
-                <div className="flex gap-2.5 overflow-x-auto pb-2 no-scrollbar">
+                <div className="flex gap-2.5 overflow-x-auto pb-2.5 pt-1 no-scrollbar">
                   {formData.receiptPhotos && formData.receiptPhotos.length > 0 ? (
                     formData.receiptPhotos.map((rUrl, idx) => (
                       <div
                         key={idx}
-                        className="relative w-20 h-20 rounded-xl overflow-hidden bg-slate-800 border border-slate-700 shrink-0"
+                        className="relative w-24 rounded-xl overflow-hidden bg-slate-900 border border-slate-750 shrink-0 flex flex-col shadow-sm"
                       >
-                        <img src={rUrl} alt="" className="w-full h-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => removePhoto(idx, true)}
-                          className="absolute top-1 right-1 p-1 rounded-md bg-black/75 text-rose-400 hover:bg-rose-500 hover:text-white"
+                        <div
+                          onClick={() => setPreviewPhotoUrl(rUrl)}
+                          className="relative w-full h-18 bg-slate-950 cursor-pointer group"
+                          title="點擊預覽大圖"
                         >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
+                          <img src={rUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removePhoto(idx, true);
+                            }}
+                            className="absolute top-1 right-1 p-1 rounded-md bg-black/75 text-rose-400 hover:bg-rose-500 hover:text-white transition shadow"
+                            title="刪除收據"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                          <span className="absolute bottom-1 left-1 px-1 py-0.2 rounded text-[9px] bg-black/75 text-slate-300 font-mono">
+                            #{idx + 1}
+                          </span>
+                        </div>
+                        {/* Position adjustment */}
+                        <div className="p-1 bg-slate-850 border-t border-slate-800 flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => movePhoto(idx, 'left', true)}
+                            className="flex-1 py-0.5 rounded bg-slate-800 hover:bg-slate-750 disabled:opacity-20 text-teal-400 font-bold text-[10px] flex items-center justify-center transition"
+                            title="前移"
+                          >
+                            <ChevronLeft className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === (formData.receiptPhotos?.length || 1) - 1}
+                            onClick={() => movePhoto(idx, 'right', true)}
+                            className="flex-1 py-0.5 rounded bg-slate-800 hover:bg-slate-750 disabled:opacity-20 text-teal-400 font-bold text-[10px] flex items-center justify-center transition"
+                            title="後移"
+                          >
+                            <ChevronRight className="w-3 h-3" />
+                          </button>
+                        </div>
                       </div>
                     ))
                   ) : (
@@ -1190,6 +1328,31 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
           }));
         }}
       />
+
+      {/* Photo Full-screen Lightbox Preview Modal */}
+      {previewPhotoUrl && (
+        <div
+          className="fixed inset-0 z-60 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setPreviewPhotoUrl(null)}
+        >
+          <button
+            onClick={() => setPreviewPhotoUrl(null)}
+            className="absolute top-4 right-4 p-2 rounded-full bg-slate-800 text-white hover:bg-slate-700 shadow-xl transition"
+            title="關閉預覽"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <div className="max-w-2xl max-h-[85vh] rounded-2xl overflow-hidden shadow-2xl border border-slate-700 bg-slate-950 p-1 flex items-center justify-center">
+            <img
+              src={previewPhotoUrl}
+              alt="照片大圖預覽"
+              className="max-w-full max-h-[80vh] object-contain rounded-xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          <p className="text-xs text-slate-400 mt-3 font-medium">點擊任意空白處關閉預覽</p>
+        </div>
+      )}
     </div>
   );
 };
