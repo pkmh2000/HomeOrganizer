@@ -33,6 +33,7 @@ import {
   HelpCircle,
   ChevronDown,
   ChevronUp,
+  Maximize2,
 } from 'lucide-react';
 import { InventoryNode } from '../types';
 import {
@@ -43,6 +44,7 @@ import {
   isNodeUnfiled,
 } from '../utils/storage';
 import { NodeTransferModal, TransferPayload } from './NodeTransferModal';
+import { ImageLightboxModal } from './ImageLightboxModal';
 
 interface ContainerViewProps {
   currentContainerId: string | null;
@@ -104,6 +106,13 @@ export const ContainerView: React.FC<ContainerViewProps> = ({
   // Quick Archive Modal State (for single unfiled item fallback)
   const [itemToArchive, setItemToArchive] = useState<InventoryNode | null>(null);
   const [targetContainerForArchive, setTargetContainerForArchive] = useState<string>('');
+
+  // Image Lightbox Preview State (Full-screen with Pinch-to-zoom)
+  const [previewLightbox, setPreviewLightbox] = useState<{
+    photos: string[];
+    index: number;
+    name: string;
+  } | null>(null);
 
   // Auto-switch to unfiled if openUnfiledDirectly requested
   React.useEffect(() => {
@@ -570,7 +579,22 @@ export const ContainerView: React.FC<ContainerViewProps> = ({
                     )}
 
                     {/* Container Image */}
-                    <div className="aspect-video w-full rounded-xl overflow-hidden bg-slate-950/80 mb-2.5 relative">
+                    <div
+                      onClick={(e) => {
+                        if (container.photos && container.photos.length > 0) {
+                          e.stopPropagation();
+                          setPreviewLightbox({
+                            photos: container.photos,
+                            index: 0,
+                            name: container.name,
+                          });
+                        }
+                      }}
+                      className={`aspect-video w-full rounded-xl overflow-hidden bg-slate-950/80 mb-2.5 relative group/img ${
+                        container.photos && container.photos.length > 0 ? 'cursor-pointer' : ''
+                      }`}
+                      title={container.photos && container.photos.length > 0 ? '點擊大圖預覽（支援雙指放大縮小）' : ''}
+                    >
                       {container.photos && container.photos[0] ? (
                         <img
                           src={container.photos[0]}
@@ -585,6 +609,11 @@ export const ContainerView: React.FC<ContainerViewProps> = ({
                       {container.isPrivate && (
                         <span className="absolute bottom-1.5 left-1.5 p-1 rounded bg-black/70 text-rose-400">
                           <Lock className="w-3 h-3" />
+                        </span>
+                      )}
+                      {container.photos && container.photos.length > 0 && (
+                        <span className="absolute top-1.5 right-1.5 p-1 rounded-md bg-black/60 text-white opacity-0 group-hover/img:opacity-100 transition shadow">
+                          <Maximize2 className="w-3 h-3 text-teal-300" />
                         </span>
                       )}
                     </div>
@@ -782,7 +811,22 @@ export const ContainerView: React.FC<ContainerViewProps> = ({
                     )}
 
                     {/* Item Thumbnail */}
-                    <div className="w-16 h-16 rounded-xl bg-slate-950/80 overflow-hidden shrink-0 relative flex items-center justify-center border border-slate-800">
+                    <div
+                      onClick={(e) => {
+                        if (item.photos && item.photos.length > 0) {
+                          e.stopPropagation();
+                          setPreviewLightbox({
+                            photos: item.photos,
+                            index: 0,
+                            name: item.name,
+                          });
+                        }
+                      }}
+                      className={`w-16 h-16 rounded-xl bg-slate-950/80 overflow-hidden shrink-0 relative flex items-center justify-center border border-slate-800 group/thumb ${
+                        item.photos && item.photos.length > 0 ? 'cursor-pointer' : ''
+                      }`}
+                      title={item.photos && item.photos.length > 0 ? '點擊大圖預覽（雙指縮放）' : ''}
+                    >
                       {item.photos && item.photos[0] ? (
                         <img
                           src={item.photos[0]}
@@ -795,6 +839,11 @@ export const ContainerView: React.FC<ContainerViewProps> = ({
                       {item.quantity > 1 && (
                         <span className="absolute bottom-1 right-1 px-1.5 py-0.2 rounded-md bg-slate-950/80 text-[10px] text-teal-300 font-bold border border-slate-800">
                           x{item.quantity}
+                        </span>
+                      )}
+                      {item.photos && item.photos.length > 0 && (
+                        <span className="absolute top-1 right-1 p-0.5 rounded bg-black/70 text-teal-300 opacity-0 group-hover/thumb:opacity-100 transition shadow">
+                          <Maximize2 className="w-2.5 h-2.5" />
                         </span>
                       )}
                     </div>
@@ -1105,6 +1154,16 @@ export const ContainerView: React.FC<ContainerViewProps> = ({
           setSelectedIds(new Set());
           setIsSelectMode(false);
         }}
+      />
+
+      {/* Image Lightbox Modal with Multi-Touch Pinch-to-Zoom */}
+      <ImageLightboxModal
+        isOpen={Boolean(previewLightbox)}
+        onClose={() => setPreviewLightbox(null)}
+        imageUrl={previewLightbox?.photos[previewLightbox.index] || null}
+        images={previewLightbox?.photos || []}
+        initialIndex={previewLightbox?.index || 0}
+        title={previewLightbox ? `${previewLightbox.name} 照片` : ''}
       />
     </div>
   );

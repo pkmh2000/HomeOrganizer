@@ -38,6 +38,7 @@ import { generateQRCodeDataURL } from '../utils/qr';
 import { compressImageFile } from '../utils/imageCompressor';
 import { BarcodeScannerModal } from './BarcodeScannerModal';
 import { PhotoGalleryModal } from './PhotoGalleryModal';
+import { ImageLightboxModal } from './ImageLightboxModal';
 
 interface ItemEditModalProps {
   isOpen: boolean;
@@ -69,6 +70,15 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGalleryPickerOpen, setIsGalleryPickerOpen] = useState(false);
   const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
+  const [previewPhotoList, setPreviewPhotoList] = useState<string[]>([]);
+  const [previewPhotoIndex, setPreviewPhotoIndex] = useState<number>(0);
+
+  const openPhotoPreview = (list: string[], idx: number) => {
+    if (!list || list.length === 0) return;
+    setPreviewPhotoList(list);
+    setPreviewPhotoIndex(idx);
+    setPreviewPhotoUrl(list[idx]);
+  };
 
   const handleAnalyzeWithGemini = async () => {
     const photo = formData.photos && formData.photos[0];
@@ -484,91 +494,107 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
                 </div>
 
                 {/* Photo Cards with Reorder & Cover Settings */}
-                <div className="flex gap-2.5 overflow-x-auto pb-2.5 pt-1 no-scrollbar">
+                <div className="flex gap-3 overflow-x-auto pb-3 pt-1 no-scrollbar">
                   {formData.photos && formData.photos.length > 0 ? (
                     formData.photos.map((pUrl, idx) => {
                       const isCover = idx === 0;
+                      const totalPhotos = formData.photos?.length || 1;
                       return (
                         <div
                           key={idx}
-                          className={`relative w-28 sm:w-32 rounded-2xl overflow-hidden bg-slate-900 border transition-all shrink-0 flex flex-col shadow-md ${
+                          className={`relative w-36 sm:w-40 rounded-2xl overflow-hidden bg-slate-900 border transition-all shrink-0 flex flex-col shadow-lg ${
                             isCover
                               ? 'border-teal-400 ring-2 ring-teal-500/40'
                               : 'border-slate-800 hover:border-slate-700'
                           }`}
                         >
-                          {/* Image Box */}
+                          {/* Image Box - tap to open Pinch-to-Zoom Lightbox */}
                           <div
-                            onClick={() => setPreviewPhotoUrl(pUrl)}
-                            className="relative w-full h-24 bg-slate-950 cursor-pointer group"
-                            title="點擊放大預覽照片"
+                            onClick={() => openPhotoPreview(formData.photos || [], idx)}
+                            className="relative w-full h-28 bg-slate-950 cursor-pointer group"
+                            title="點擊全螢幕大圖預覽（支援雙指放大縮小）"
                           >
-                            <img src={pUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition duration-200" />
+                            <img
+                              src={pUrl}
+                              alt=""
+                              className="w-full h-full object-cover group-hover:scale-105 transition duration-200"
+                            />
+
+                            {/* Mobile & Desktop Full-screen Preview Hint */}
+                            <div className="absolute inset-0 bg-black/25 hover:bg-black/40 flex items-center justify-center transition">
+                              <span className="px-2 py-1 rounded-lg bg-black/75 text-white text-[11px] font-bold flex items-center gap-1 backdrop-blur-xs border border-white/20 shadow-md">
+                                <Maximize2 className="w-3.5 h-3.5 text-teal-300" />
+                                <span>雙指大圖</span>
+                              </span>
+                            </div>
 
                             {/* Cover Badge / Set as Cover Button */}
-                            <div className="absolute top-1.5 left-1.5" onClick={(e) => e.stopPropagation()}>
+                            <div className="absolute top-1.5 left-1.5 z-10" onClick={(e) => e.stopPropagation()}>
                               {isCover ? (
-                                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] bg-gradient-to-r from-teal-400 to-emerald-400 text-slate-950 font-black shadow-sm">
-                                  <Star className="w-2.5 h-2.5 fill-slate-950 stroke-[2.5]" />
-                                  <span>主封面</span>
+                                <span className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] bg-gradient-to-r from-teal-400 to-emerald-400 text-slate-950 font-black shadow-md">
+                                  <Star className="w-3 h-3 fill-slate-950 stroke-[2.5]" />
+                                  <span>★ 主封面</span>
                                 </span>
                               ) : (
                                 <button
                                   type="button"
                                   onClick={() => setCoverPhoto(idx)}
-                                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] bg-slate-900/90 hover:bg-teal-500 text-slate-300 hover:text-slate-950 font-bold border border-slate-750 transition active:scale-95 shadow-sm"
+                                  className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] bg-slate-900/95 hover:bg-teal-500 text-teal-300 hover:text-slate-950 font-bold border border-teal-500/50 transition active:scale-95 shadow-md"
                                   title="設為第 1 張主封面照"
                                 >
-                                  <Star className="w-2.5 h-2.5" />
-                                  <span>設封面</span>
+                                  <Star className="w-3 h-3" />
+                                  <span>設為封面</span>
                                 </button>
                               )}
                             </div>
 
                             {/* Top Right: Delete Button */}
-                            <div className="absolute top-1.5 right-1.5" onClick={(e) => e.stopPropagation()}>
+                            <div className="absolute top-1.5 right-1.5 z-10" onClick={(e) => e.stopPropagation()}>
                               <button
                                 type="button"
                                 onClick={() => removePhoto(idx, false)}
-                                className="p-1 rounded-md bg-slate-900/85 text-rose-400 hover:bg-rose-500 hover:text-white transition shadow"
+                                className="p-1.5 rounded-lg bg-slate-900/90 text-rose-400 hover:bg-rose-500 hover:text-white transition shadow border border-slate-750"
                                 title="刪除照片"
                               >
-                                <Trash2 className="w-3 h-3" />
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
 
                             {/* Bottom Index badge */}
-                            <div className="absolute bottom-1 left-1.5 px-1 py-0.2 rounded text-[9px] bg-black/75 text-slate-300 font-mono pointer-events-none">
+                            <div className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded text-[10px] bg-black/80 text-slate-200 font-mono pointer-events-none border border-slate-800">
                               #{idx + 1}
-                            </div>
-                            <div className="absolute bottom-1 right-1.5 p-0.5 rounded text-white bg-black/75 opacity-0 group-hover:opacity-100 transition pointer-events-none">
-                              <Maximize2 className="w-2.5 h-2.5" />
                             </div>
                           </div>
 
                           {/* Reorder Position Controls (前移 / 後移) */}
-                          <div className="p-1 bg-slate-850 border-t border-slate-800 flex items-center gap-1">
-                            <button
-                              type="button"
-                              disabled={idx === 0}
-                              onClick={() => movePhoto(idx, 'left', false)}
-                              className="flex-1 py-1 rounded bg-slate-800 hover:bg-slate-750 disabled:opacity-20 disabled:hover:bg-slate-800 text-teal-400 font-bold text-[10px] flex items-center justify-center gap-0.5 transition active:scale-95"
-                              title="向左前移順序"
-                            >
-                              <ChevronLeft className="w-3 h-3" />
-                              <span>前移</span>
-                            </button>
-                            <button
-                              type="button"
-                              disabled={idx === (formData.photos?.length || 1) - 1}
-                              onClick={() => movePhoto(idx, 'right', false)}
-                              className="flex-1 py-1 rounded bg-slate-800 hover:bg-slate-750 disabled:opacity-20 disabled:hover:bg-slate-800 text-teal-400 font-bold text-[10px] flex items-center justify-center gap-0.5 transition active:scale-95"
-                              title="向右後移順序"
-                            >
-                              <span>後移</span>
-                              <ChevronRight className="w-3 h-3" />
-                            </button>
-                          </div>
+                          {totalPhotos > 1 ? (
+                            <div className="p-1.5 bg-slate-850 border-t border-slate-800 flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() => movePhoto(idx, 'left', false)}
+                                className="flex-1 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-25 disabled:pointer-events-none text-teal-300 font-bold text-xs flex items-center justify-center gap-1 transition active:scale-95 border border-slate-700 shadow-xs"
+                                title="向左前移順序"
+                              >
+                                <ChevronLeft className="w-3.5 h-3.5 stroke-[2.5]" />
+                                <span>前移</span>
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === totalPhotos - 1}
+                                onClick={() => movePhoto(idx, 'right', false)}
+                                className="flex-1 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-25 disabled:pointer-events-none text-teal-300 font-bold text-xs flex items-center justify-center gap-1 transition active:scale-95 border border-slate-700 shadow-xs"
+                                title="向右後移順序"
+                              >
+                                <span>後移</span>
+                                <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="py-1 px-1 bg-slate-850/80 border-t border-slate-800 text-center">
+                              <span className="text-[10px] text-slate-400 font-medium">第 1 張封面 (新增更多可排序)</span>
+                            </div>
+                          )}
                         </div>
                       );
                     })
@@ -1037,57 +1063,74 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
                   </button>
                 </div>
 
-                <div className="flex gap-2.5 overflow-x-auto pb-2.5 pt-1 no-scrollbar">
+                <div className="flex gap-3 overflow-x-auto pb-3 pt-1 no-scrollbar">
                   {formData.receiptPhotos && formData.receiptPhotos.length > 0 ? (
-                    formData.receiptPhotos.map((rUrl, idx) => (
-                      <div
-                        key={idx}
-                        className="relative w-24 rounded-xl overflow-hidden bg-slate-900 border border-slate-750 shrink-0 flex flex-col shadow-sm"
-                      >
+                    formData.receiptPhotos.map((rUrl, idx) => {
+                      const totalReceipts = formData.receiptPhotos?.length || 1;
+                      return (
                         <div
-                          onClick={() => setPreviewPhotoUrl(rUrl)}
-                          className="relative w-full h-18 bg-slate-950 cursor-pointer group"
-                          title="點擊預覽大圖"
+                          key={idx}
+                          className="relative w-32 sm:w-36 rounded-2xl overflow-hidden bg-slate-900 border border-slate-750 shrink-0 flex flex-col shadow-md"
                         >
-                          <img src={rUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition" />
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removePhoto(idx, true);
-                            }}
-                            className="absolute top-1 right-1 p-1 rounded-md bg-black/75 text-rose-400 hover:bg-rose-500 hover:text-white transition shadow"
-                            title="刪除收據"
+                          <div
+                            onClick={() => openPhotoPreview(formData.receiptPhotos || [], idx)}
+                            className="relative w-full h-24 bg-slate-950 cursor-pointer group"
+                            title="點擊預覽收據大圖（支援雙指放大縮小）"
                           >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                          <span className="absolute bottom-1 left-1 px-1 py-0.2 rounded text-[9px] bg-black/75 text-slate-300 font-mono">
-                            #{idx + 1}
-                          </span>
+                            <img src={rUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                            <div className="absolute inset-0 bg-black/20 group-hover:bg-black/35 flex items-center justify-center transition">
+                              <span className="px-1.5 py-0.5 rounded-md bg-black/70 text-white text-[10px] font-bold flex items-center gap-1 border border-white/20">
+                                <Maximize2 className="w-3 h-3 text-teal-300" />
+                                <span>雙指大圖</span>
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removePhoto(idx, true);
+                              }}
+                              className="absolute top-1.5 right-1.5 p-1 rounded-md bg-slate-900/90 text-rose-400 hover:bg-rose-500 hover:text-white transition shadow z-10"
+                              title="刪除收據"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                            <span className="absolute bottom-1 left-1.5 px-1.5 py-0.2 rounded text-[10px] bg-black/80 text-slate-200 font-mono border border-slate-800">
+                              #{idx + 1}
+                            </span>
+                          </div>
+                          {/* Position adjustment */}
+                          {totalReceipts > 1 ? (
+                            <div className="p-1.5 bg-slate-850 border-t border-slate-800 flex items-center gap-1">
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() => movePhoto(idx, 'left', true)}
+                                className="flex-1 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-25 disabled:pointer-events-none text-teal-300 font-bold text-xs flex items-center justify-center gap-0.5 transition active:scale-95 border border-slate-700 shadow-xs"
+                                title="前移"
+                              >
+                                <ChevronLeft className="w-3.5 h-3.5" />
+                                <span>前移</span>
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === totalReceipts - 1}
+                                onClick={() => movePhoto(idx, 'right', true)}
+                                className="flex-1 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-25 disabled:pointer-events-none text-teal-300 font-bold text-xs flex items-center justify-center gap-0.5 transition active:scale-95 border border-slate-700 shadow-xs"
+                                title="後移"
+                              >
+                                <span>後移</span>
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="py-1 px-1 bg-slate-850/80 border-t border-slate-800 text-center">
+                              <span className="text-[10px] text-slate-400">收據憑證 (新增多張可排序)</span>
+                            </div>
+                          )}
                         </div>
-                        {/* Position adjustment */}
-                        <div className="p-1 bg-slate-850 border-t border-slate-800 flex items-center gap-1">
-                          <button
-                            type="button"
-                            disabled={idx === 0}
-                            onClick={() => movePhoto(idx, 'left', true)}
-                            className="flex-1 py-0.5 rounded bg-slate-800 hover:bg-slate-750 disabled:opacity-20 text-teal-400 font-bold text-[10px] flex items-center justify-center transition"
-                            title="前移"
-                          >
-                            <ChevronLeft className="w-3 h-3" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={idx === (formData.receiptPhotos?.length || 1) - 1}
-                            onClick={() => movePhoto(idx, 'right', true)}
-                            className="flex-1 py-0.5 rounded bg-slate-800 hover:bg-slate-750 disabled:opacity-20 text-teal-400 font-bold text-[10px] flex items-center justify-center transition"
-                            title="後移"
-                          >
-                            <ChevronRight className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <div
                       onClick={() => receiptInputRef.current?.click()}
@@ -1329,30 +1372,15 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
         }}
       />
 
-      {/* Photo Full-screen Lightbox Preview Modal */}
-      {previewPhotoUrl && (
-        <div
-          className="fixed inset-0 z-60 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-4 animate-in fade-in"
-          onClick={() => setPreviewPhotoUrl(null)}
-        >
-          <button
-            onClick={() => setPreviewPhotoUrl(null)}
-            className="absolute top-4 right-4 p-2 rounded-full bg-slate-800 text-white hover:bg-slate-700 shadow-xl transition"
-            title="關閉預覽"
-          >
-            <X className="w-5 h-5" />
-          </button>
-          <div className="max-w-2xl max-h-[85vh] rounded-2xl overflow-hidden shadow-2xl border border-slate-700 bg-slate-950 p-1 flex items-center justify-center">
-            <img
-              src={previewPhotoUrl}
-              alt="照片大圖預覽"
-              className="max-w-full max-h-[80vh] object-contain rounded-xl"
-              onClick={(e) => e.stopPropagation()}
-            />
-          </div>
-          <p className="text-xs text-slate-400 mt-3 font-medium">點擊任意空白處關閉預覽</p>
-        </div>
-      )}
+      {/* Photo Full-screen Lightbox Preview Modal with Pinch-to-Zoom */}
+      <ImageLightboxModal
+        isOpen={Boolean(previewPhotoUrl)}
+        onClose={() => setPreviewPhotoUrl(null)}
+        imageUrl={previewPhotoUrl}
+        images={previewPhotoList}
+        initialIndex={previewPhotoIndex}
+        title={formData.name ? `${formData.name} 照片大圖檢視` : '照片大圖檢視'}
+      />
     </div>
   );
 };

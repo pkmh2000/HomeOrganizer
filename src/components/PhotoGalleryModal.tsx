@@ -16,6 +16,7 @@ import {
 import { GalleryPhoto, InventoryNode } from '../types';
 import { loadGalleryPhotos, saveGalleryPhoto, deleteGalleryPhoto } from '../utils/storage';
 import { compressImageFile } from '../utils/imageCompressor';
+import { ImageLightboxModal } from './ImageLightboxModal';
 
 interface PhotoGalleryModalProps {
   isOpen: boolean;
@@ -410,27 +411,13 @@ export const PhotoGalleryModal: React.FC<PhotoGalleryModalProps> = ({
         </div>
       </div>
 
-      {/* Large Preview Modal */}
-      {previewPhoto && (
-        <div
-          onClick={() => setPreviewPhoto(null)}
-          className="fixed inset-0 z-60 bg-black/90 flex items-center justify-center p-4"
-        >
-          <div className="relative max-w-3xl max-h-[90vh] flex flex-col items-center">
-            <img
-              src={previewPhoto}
-              alt="Preview"
-              className="max-w-full max-h-[80vh] rounded-2xl object-contain border border-slate-700 shadow-2xl"
-            />
-            <button
-              onClick={() => setPreviewPhoto(null)}
-              className="mt-3 px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold"
-            >
-              關閉預覽
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Large Preview Modal with Pinch-to-Zoom */}
+      <ImageLightboxModal
+        isOpen={Boolean(previewPhoto)}
+        onClose={() => setPreviewPhoto(null)}
+        imageUrl={previewPhoto}
+        title="圖庫照片檢視"
+      />
     </div>
   );
 };
