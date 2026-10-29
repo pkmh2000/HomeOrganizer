@@ -13,6 +13,7 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { ViewTab, UserProfile } from '../types';
+import { APP_VERSION } from '../version';
 
 interface NavbarProps {
   householdName: string;
@@ -94,8 +95,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* 右側：純顯示狀態標籤 (身分與更新標記，非邊角點擊區) */}
+        {/* 右側：純顯示狀態標籤 (版本號、身分與更新標記，非邊角點擊區) */}
         <div className="flex items-center gap-1.5 shrink-0 text-[10px]">
+          <span
+            className="px-1.5 py-0.5 rounded-md bg-teal-500/15 text-teal-300 font-mono font-bold border border-teal-500/30"
+            title={`目前運行版本: v${APP_VERSION}`}
+          >
+            v{APP_VERSION}
+          </span>
           <span className="px-2 py-0.5 rounded-full bg-slate-800/80 text-slate-300 border border-slate-700/60 font-medium flex items-center gap-1">
             <span>{activeUser?.avatar || '👤'}</span>
             <span className="max-w-[70px] truncate">{activeUser?.name || '身分'}</span>

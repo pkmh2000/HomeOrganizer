@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { ViewTab } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
+import { APP_VERSION } from '../version';
 
 interface BottomNavProps {
   activeTab: ViewTab;
@@ -176,20 +177,25 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               )}
             </div>
 
-            {/* 底部附加工具 (PWA 下載 / 純淨模式切換) */}
+            {/* 底部附加工具 (PWA 下載 / 純淨模式切換 / 版本號) */}
             <div className="pt-2.5 mt-2 border-t border-slate-800 flex items-center justify-between text-xs">
-              {onTogglePureViewMode && (
-                <button
-                  onClick={() => {
-                    setIsMoreSheetOpen(false);
-                    onTogglePureViewMode();
-                  }}
-                  className="flex items-center gap-1.5 text-slate-400 hover:text-teal-300 py-1 px-2.5 rounded-lg bg-slate-800/60"
-                >
-                  {pureViewMode ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                  <span>{pureViewMode ? '顯示完整工具' : '純淨全螢幕檢視'}</span>
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {onTogglePureViewMode && (
+                  <button
+                    onClick={() => {
+                      setIsMoreSheetOpen(false);
+                      onTogglePureViewMode();
+                    }}
+                    className="flex items-center gap-1.5 text-slate-400 hover:text-teal-300 py-1 px-2.5 rounded-lg bg-slate-800/60"
+                  >
+                    {pureViewMode ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                    <span>{pureViewMode ? '顯示完整工具' : '純淨全螢幕'}</span>
+                  </button>
+                )}
+                <span className="text-[10px] text-teal-400 font-mono font-bold bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20">
+                  v{APP_VERSION}
+                </span>
+              </div>
               <PWAInstallButton variant="navbar" />
             </div>
           </div>
