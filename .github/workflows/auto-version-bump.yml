@@ -1,0 +1,37 @@
+name: Auto Bump Version on Push
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'src/version.ts'
+      - 'package.json'
+      - '.github/**'
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Bump Version
+        run: |
+          npm run bump
+
+      - name: Commit and Push Version Bump
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(release): auto bump version [skip ci]" || echo "No changes to commit"
+          git push

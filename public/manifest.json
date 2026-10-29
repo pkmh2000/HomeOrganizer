@@ -1,0 +1,50 @@
+{
+  "name": "HomeOrganizer 家庭智慧生活收納管家",
+  "short_name": "居家收納管家",
+  "description": "結合 Gemini AI 智慧拍照辨識、多層級收納容器管理、耗材到期日追蹤與家庭行事曆備忘工具。",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "portrait",
+  "theme_color": "#0d9488",
+  "background_color": "#0f172a",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "./pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["utilities", "lifestyle", "productivity"],
+  "shortcuts": [
+    {
+      "name": "拍照收納",
+      "short_name": "拍照",
+      "description": "快速拍照辨識收納物品",
+      "url": "./index.html?action=camera",
+      "icons": [{ "src": "./pwa-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "家庭行事曆",
+      "short_name": "行事曆",
+      "description": "檢視到期品與家庭排程",
+      "url": "./index.html?action=calendar",
+      "icons": [{ "src": "./pwa-192x192.png", "sizes": "192x192" }]
+    }
+  ]
+}
