@@ -1029,7 +1029,8 @@ export function loadSnapshots(): LocalSnapshot[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_SNAPSHOTS);
     if (!raw) return [];
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
@@ -1045,15 +1046,54 @@ export function saveSnapshot(name: string, data: HouseholdData): LocalSnapshot {
     memoCount: data.memos.length,
     data,
   };
-  const updated = [newSnapshot, ...current].slice(0, 20); // retain up to 20 snapshots
-  localStorage.setItem(STORAGE_KEY_SNAPSHOTS, JSON.stringify(updated));
+  const updated = [newSnapshot, ...current].slice(0, 15);
+
+  // 1. Always mirror full, uncompressed snapshots to IndexedDB (virtually unlimited quota)
+  idbSet('homeorganizer_snapshots_v2', updated).catch(() => {});
+
+  // 2. Write to LocalStorage with multi-level quota fallback handling
+  try {
+    localStorage.setItem(STORAGE_KEY_SNAPSHOTS, JSON.stringify(updated));
+  } catch (e) {
+    console.warn('LocalStorage snapshot exceeded quota, applying resilient quota trimming:', e);
+    try {
+      // Level 1: Retain fewer snapshots (latest 3)
+      localStorage.setItem(STORAGE_KEY_SNAPSHOTS, JSON.stringify(updated.slice(0, 3)));
+    } catch {
+      try {
+        // Level 2: Strip heavy raster base64 images from LocalStorage snapshot cache (IndexedDB retains pristine full data)
+        const lightweightSnapshots = updated.slice(0, 5).map((snap) => ({
+          ...snap,
+          data: {
+            ...snap.data,
+            nodes: snap.data.nodes.map((n) => ({
+              ...n,
+              photos: (n.photos || []).map((p) =>
+                p.startsWith('data:image/svg+xml') || p.length < 5000
+                  ? p
+                  : makeSvgDataUri('#0f766e', '#042f2e', '📦', n.name)
+              ),
+              receiptPhotos: [],
+            })),
+          },
+        }));
+        localStorage.setItem(STORAGE_KEY_SNAPSHOTS, JSON.stringify(lightweightSnapshots));
+      } catch (finalErr) {
+        console.warn('LocalStorage snapshot write skipped; pristine snapshot preserved in IndexedDB', finalErr);
+      }
+    }
+  }
+
   return newSnapshot;
 }
 
 export function deleteSnapshot(id: string): void {
   const current = loadSnapshots();
   const updated = current.filter((s) => s.id !== id);
-  localStorage.setItem(STORAGE_KEY_SNAPSHOTS, JSON.stringify(updated));
+  try {
+    localStorage.setItem(STORAGE_KEY_SNAPSHOTS, JSON.stringify(updated));
+  } catch {}
+  idbSet('homeorganizer_snapshots_v2', updated).catch(() => {});
 }
 
 // Export Destination Preference

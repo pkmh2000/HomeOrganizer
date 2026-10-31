@@ -4,7 +4,7 @@
  */
 
 export const APP_VERSION = '1.00.06'; // 遞增版號
-export const APP_BUILD_TIME = '2026-10-29T10:55:37.795Z'; // 建置發布時間戳
+export const APP_BUILD_TIME = '2026-10-29T12:00:00.000Z'; // 建置發布時間戳
 export const APP_RELEASE_STAGE = 'beta_iteration'; // 測試迭代版 (正式上線將重置為 v1.0.0)
 
 export interface VersionChangeLog {
@@ -14,6 +14,15 @@ export interface VersionChangeLog {
 }
 
 export const APP_CHANGELOG: VersionChangeLog[] = [
+  {
+    version: '1.00.06',
+    date: '2026-10-29',
+    changes: [
+      '修復個人雲轉移至本機 (Local) 卡住報錯：修復因備份快照體積超出瀏覽器 LocalStorage 5MB 配額導致的 QuotaExceededError，快照已全量納入 IndexedDB 雙層儲存，並導入多級安全降級保護機制。',
+      '修復本機容量檢測誤判：優化行動瀏覽器與 WebView 限制下安全緩衝檢測，改採自適應動態門檻，杜絕虛擬配額限制導致轉移中斷。',
+      '強化雲端轉移至本機之鏡像提取：轉移與解綁回 Local 時優先核對個人雲儲存庫鏡像，確保所有物件無損回流本機並即時同步介面呈現。',
+    ],
+  },
   {
     version: '1.00.05',
     date: '2026-10-29',

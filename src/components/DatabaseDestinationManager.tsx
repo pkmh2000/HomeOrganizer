@@ -55,7 +55,7 @@ import {
   applyCloudMerge,
 } from '../utils/databaseSyncManager';
 import { requestCloudUnbindCode, verifyCloudUnbindCode } from '../utils/authManager';
-import { idbSet } from '../utils/indexedDb';
+import { idbGet, idbSet } from '../utils/indexedDb';
 
 interface DatabaseDestinationManagerProps {
   householdData: HouseholdData;
@@ -357,12 +357,25 @@ export const DatabaseDestinationManager: React.FC<DatabaseDestinationManagerProp
       }
 
       setIsUnbindingAndMigrating(true);
-      setUnbindProgress({ percent: 15, message: '正在建立本機安全防護快照...' });
+      setUnbindProgress({ percent: 15, message: '正在載入雲端最新資料並建立本機安全防護快照...' });
 
-      createSafetyBackupSnapshot(householdData, '個人雲解除綁定前安全轉移回本機');
+      // 優先確認個人雲鏡像資料，確保所有遠端同步物件皆完整移回本機
+      let dataToTransfer = householdData;
+      try {
+        const mirror = await idbGet<{ updatedAt: string; vaultFolder: string; payload: HouseholdData }>(
+          'homeorganizer_gdrive_vault_mirror'
+        );
+        if (mirror?.payload?.nodes?.length && mirror.payload.nodes.length >= householdData.nodes.length) {
+          dataToTransfer = mirror.payload;
+        }
+      } catch (err) {
+        console.warn('Could not read cloud mirror for unbind:', err);
+      }
+
+      createSafetyBackupSnapshot(dataToTransfer, '個人雲解除綁定前安全轉移回本機');
       onSnapshotCreated?.();
 
-      const result = await executeDatabaseMigration('google_drive', 'local', householdData, (prog) => {
+      const result = await executeDatabaseMigration('google_drive', 'local', dataToTransfer, (prog) => {
         setUnbindProgress({
           percent: prog.progressPercent,
           message: prog.message,
@@ -394,7 +407,7 @@ export const DatabaseDestinationManager: React.FC<DatabaseDestinationManagerProp
       setIsUnbindingAndMigrating(false);
       setIsUnbindModalOpen(false);
       refreshVaultStatus();
-      onRefreshData?.(householdData);
+      onRefreshData?.(dataToTransfer);
       setFeedbackNotice('🎉 已成功將主資料庫安全轉移回本機 (Local)，並已解除個人雲綁定！');
       setTimeout(() => setFeedbackNotice(null), 5000);
     } else {
@@ -465,9 +478,24 @@ export const DatabaseDestinationManager: React.FC<DatabaseDestinationManagerProp
       return;
     }
 
+    // 若從個人雲 Google Drive 轉出至 Local 或其他目的地，確保先讀取雲端鏡像中的最新資料
+    let dataToMigrate = householdData;
+    if (dbState.activeDestination === 'google_drive') {
+      try {
+        const mirror = await idbGet<{ updatedAt: string; vaultFolder: string; payload: HouseholdData }>(
+          'homeorganizer_gdrive_vault_mirror'
+        );
+        if (mirror?.payload?.nodes?.length && mirror.payload.nodes.length >= householdData.nodes.length) {
+          dataToMigrate = mirror.payload;
+        }
+      } catch (err) {
+        console.warn('Could not read cloud mirror before migration:', err);
+      }
+    }
+
     // 若目標是個人雲 Google Drive，且雲端已存在儲存庫且有資料：
     if (selectedTarget === 'google_drive' && vaultStatus?.exists && vaultStatus.remoteData) {
-      const diff = computeCloudDiff(householdData, vaultStatus.remoteData);
+      const diff = computeCloudDiff(dataToMigrate, vaultStatus.remoteData);
       if (diff.hasDifferences) {
         setDiffResult(diff);
         setDiffModalOpen(true);
@@ -475,7 +503,7 @@ export const DatabaseDestinationManager: React.FC<DatabaseDestinationManagerProp
       }
     }
 
-    await runMigrationCore(selectedTarget, householdData);
+    await runMigrationCore(selectedTarget, dataToMigrate);
   };
 
   // Core Migration runner
@@ -499,6 +527,7 @@ export const DatabaseDestinationManager: React.FC<DatabaseDestinationManagerProp
       setDbState(newState);
       onSnapshotCreated?.();
       refreshVaultStatus();
+      onRefreshData?.(dataToMigrate);
 
       // 成功轉移後，彈窗詢問是否刪除原 data base
       setPostMigrationPrompt({

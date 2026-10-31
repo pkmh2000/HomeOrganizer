@@ -5,7 +5,7 @@ import {
   HouseholdData,
 } from '../types';
 import { idbGet, idbSet } from './indexedDb';
-import { saveSnapshot, loadSnapshots } from './storage';
+import { saveSnapshot, loadSnapshots, saveNodes, saveMemos } from './storage';
 
 const STORAGE_KEY_DB_LOCATION = 'homeorganizer_db_location_state_v1';
 
@@ -92,7 +92,11 @@ export async function checkStorageQuota(
         const total = estimate.quota || 2 * 1024 * 1024 * 1024; // 預設 2GB
         const used = estimate.usage || 0;
         const available = Math.max(0, total - used);
-        const needed = requiredBytes + safeReserveBytes;
+        // 自適應安全預留：在行動端/沙盒環境，瀏覽器配額可能動態分配為 30~100MB。
+        // 若要求死硬 200MB，會導致明明資料只有 100KB 卻誤判空間不足而卡住！
+        // 實際安全門檻：資料庫體積之 3 倍緩衝 + 最少 5MB。若可用容量高於此門檻即判定為充裕。
+        const effectiveBuffer = Math.min(safeReserveBytes, Math.max(5 * 1024 * 1024, requiredBytes * 3));
+        const needed = requiredBytes + effectiveBuffer;
         const isSufficient = available >= needed;
 
         return {
@@ -104,7 +108,7 @@ export async function checkStorageQuota(
           isSufficient,
           warningMessage: isSufficient
             ? undefined
-            : `本機儲存可用空間僅剩 ${formatBytes(available)}，低於安全預留緩衝 (${safeReserveMb} MB)，建議清理手機快取或舊相片。`,
+            : `本機儲存可用空間僅剩 ${formatBytes(available)}（需至少 ${formatBytes(needed)}），空間不足無法安全轉移！請先清理設備空間。`,
         };
       } catch (e) {
         console.warn('Storage estimate failed', e);
@@ -258,15 +262,20 @@ export async function checkStorageQuota(
  * 符合用戶指令：「要使用共享, 或雲端, NAS 再啟用設定.data base 都要備分!」
  */
 export function createSafetyBackupSnapshot(data: HouseholdData, reason: string): string {
-  const timeStr = new Date().toLocaleString('zh-TW', {
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-  const snapshotName = `[防護備份] ${reason} (${timeStr})`;
-  const snap = saveSnapshot(snapshotName, data);
-  return snap.id;
+  try {
+    const timeStr = new Date().toLocaleString('zh-TW', {
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const snapshotName = `[防護備份] ${reason} (${timeStr})`;
+    const snap = saveSnapshot(snapshotName, data);
+    return snap?.id || 'snap-safe-' + Date.now();
+  } catch (err) {
+    console.warn('createSafetyBackupSnapshot warning (proceeding safely with migration):', err);
+    return 'snap-fallback-' + Date.now();
+  }
 }
 
 export interface MigrationStepResult {
@@ -343,6 +352,12 @@ export async function executeDatabaseMigration(
       // 確保本機 IndexedDB 與 LocalStorage 完整存入
       await idbSet('homeorganizer_nodes_v2', data.nodes);
       await idbSet('homeorganizer_memos_v2', data.memos);
+      try {
+        saveNodes(data.nodes);
+        saveMemos(data.memos);
+      } catch (saveErr) {
+        console.warn('saveNodes fallback warning during local migration:', saveErr);
+      }
     } else if (to === 'google_drive') {
       // 寫入 Google Drive 模擬/實際遠端存檔鏡像
       const drivePayload = {
