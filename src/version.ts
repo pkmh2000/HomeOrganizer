@@ -4,7 +4,7 @@
  */
 
 export const APP_VERSION = '1.00.08'; // 遞增版號
-export const APP_BUILD_TIME = '2026-10-31T11:33:50.083Z'; // 建置發布時間戳
+export const APP_BUILD_TIME = '2026-10-31T09:10:00.000Z'; // 建置發布時間戳
 export const APP_RELEASE_STAGE = 'beta_iteration'; // 測試迭代版 (正式上線將重置為 v1.0.0)
 
 export interface VersionChangeLog {
@@ -14,6 +14,16 @@ export interface VersionChangeLog {
 }
 
 export const APP_CHANGELOG: VersionChangeLog[] = [
+  {
+    version: '1.00.08',
+    date: '2026-10-31',
+    changes: [
+      '100% 離線免連網修圖：全面移除外部外網修圖工具依賴，全面守護隱私並確保離線環境下流暢修圖。',
+      '內建畫布自由與多比例裁切 (Cropping)：支援自由拖曳四角裁切控制點與預設比例 (自由、1:1、4:3、3:4、16:9)，搭配九宮格構圖輔助線與暗化遮罩。',
+      '智慧離線去背 (Cutout)：提供「一鍵邊緣智慧去背」（周邊色彩自適應採樣與歐氏距離閾值調控 8%~50%）、「魔術吸管點擊採樣去背」、「手動透明橡皮擦」，並支援去背後底色自選（透明 PNG、純白、淺灰、暖米色）與多步 Undo 歷史復原。',
+      '手機自帶照片 App 離線工作流：新增「儲存至相簿 ➔ 手機自帶「照片」App 標註/編輯」選項，解決手機瀏覽器無法直接調用系統原生相簿編輯器的限制，並支援修圖完成後一鍵選取替換。',
+    ],
+  },
   {
     version: '1.00.07',
     date: '2026-10-31',

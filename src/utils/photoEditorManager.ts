@@ -1,15 +1,16 @@
 /**
- * Photo Editor Binding & Invocation Manager
- * Allows temporarily binding or selecting an installed photo editing app (via System Web Share / schemes),
- * built-in canvas image editor, or web tools, with full settings to change or cancel anytime.
+ * Photo Editor Binding & Invocation Manager (100% Local-First & Offline)
+ * Supports Built-in Canvas Photo Editor (Offline Crop, Rotate, Light Adjust, Markup, and Smart Cutout/Background Removal),
+ * System Gallery Save & Native Photo App Markup, or System Share Target.
+ * Zero external internet dependency.
  */
 
 export type PhotoEditorType =
-  | 'ask_every_time'
-  | 'system_share'
   | 'builtin_canvas'
-  | 'photopea'
-  | 'custom_scheme';
+  | 'system_gallery'
+  | 'system_share'
+  | 'custom_scheme'
+  | 'ask_every_time';
 
 export interface PhotoEditorPreference {
   type: PhotoEditorType;
@@ -18,10 +19,10 @@ export interface PhotoEditorPreference {
   boundAt?: string;
 }
 
-const STORAGE_KEY_PHOTO_EDITOR = 'homeorganizer_photo_editor_pref_v1';
+const STORAGE_KEY_PHOTO_EDITOR = 'homeorganizer_photo_editor_pref_v2';
 
 export const DEFAULT_PHOTO_EDITOR_PREF: PhotoEditorPreference = {
-  type: 'ask_every_time',
+  type: 'builtin_canvas', // 預設優先使用 100% 離線的強大內建修圖工具
 };
 
 export function loadPhotoEditorPreference(): PhotoEditorPreference {
@@ -30,6 +31,10 @@ export function loadPhotoEditorPreference(): PhotoEditorPreference {
     if (!raw) return DEFAULT_PHOTO_EDITOR_PREF;
     const parsed = JSON.parse(raw);
     if (!parsed || !parsed.type) return DEFAULT_PHOTO_EDITOR_PREF;
+    // Disallow external internet tools if previously stored
+    if ((parsed.type as string) === 'photopea') {
+      return DEFAULT_PHOTO_EDITOR_PREF;
+    }
     return parsed;
   } catch {
     return DEFAULT_PHOTO_EDITOR_PREF;
@@ -54,17 +59,17 @@ export function clearPhotoEditorPreference(): void {
 
 export function getPhotoEditorDisplayName(type: PhotoEditorType, customName?: string): string {
   switch (type) {
-    case 'system_share':
-      return '調用手機已安裝照片編輯 App (系統原生分享)';
     case 'builtin_canvas':
-      return '內建畫布修圖工具 (即開即修、旋轉調光與標記)';
-    case 'photopea':
-      return 'Photopea 線上專業修圖';
+      return '內建畫布修圖工具 (離線裁切、旋轉、調光、塗鴉與智慧去背)';
+    case 'system_gallery':
+      return '儲存至手機相簿 ➔ 使用手機自帶照片 App 編輯/標註';
+    case 'system_share':
+      return '調用手機已安裝第三方修圖 App (透過系統分享選單)';
     case 'custom_scheme':
       return customName ? `自訂 App (${customName})` : '自訂 App URL Scheme';
     case 'ask_every_time':
     default:
-      return '每次開啟時詢問 (未綁定特定 App)';
+      return '每次開啟時詢問 (未綁定特定工具)';
   }
 }
 
@@ -84,8 +89,23 @@ export function base64ToFile(base64Data: string, filename: string = 'homeorganiz
 }
 
 /**
+ * Downloads or saves photo to device photo gallery so user can open native iOS / Android Photos to edit/markup
+ */
+export function downloadPhotoToDevice(base64Data: string, filename: string = 'homeorganizer_item.jpg'): void {
+  try {
+    const a = document.createElement('a');
+    a.href = base64Data;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } catch (err) {
+    console.error('Failed to download photo to device:', err);
+  }
+}
+
+/**
  * Triggers native system share to hand off photo to user's installed photo editing apps
- * (e.g. Snapseed, Lightroom, Meitu, iOS Photos markup, Android default photo editor).
  */
 export async function invokeSystemShareForPhoto(
   base64Photo: string,
@@ -102,7 +122,7 @@ export async function invokeSystemShareForPhoto(
       });
       return {
         success: true,
-        message: '已將照片傳送至系統分享選單！修圖完成後，請點擊「替換修圖後照片」完成更新。',
+        message: '已將照片傳送至系統分享選單！修圖完成後，請點擊「選取已修好照片替換」。',
       };
     } else {
       return {

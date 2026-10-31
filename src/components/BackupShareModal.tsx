@@ -535,9 +535,9 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
               </div>
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center text-teal-400 shrink-0">
-                  {editorPref.type === 'system_share' && <Smartphone className="w-5 h-5" />}
                   {editorPref.type === 'builtin_canvas' && <Sliders className="w-5 h-5" />}
-                  {editorPref.type === 'photopea' && <Sparkles className="w-5 h-5" />}
+                  {editorPref.type === 'system_gallery' && <Download className="w-5 h-5" />}
+                  {editorPref.type === 'system_share' && <Smartphone className="w-5 h-5" />}
                   {editorPref.type === 'custom_scheme' && <ExternalLink className="w-5 h-5" />}
                   {editorPref.type === 'ask_every_time' && <Palette className="w-5 h-5" />}
                 </div>
@@ -546,12 +546,12 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
                     {getPhotoEditorDisplayName(editorPref.type, editorPref.customName)}
                   </h4>
                   <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
-                    {editorPref.type === 'system_share' &&
-                      '點擊修圖將開啟手機系統原生分享選單，直接發送至 Snapseed、美圖秀秀、Lightroom、iOS照片標註 等。'}
                     {editorPref.type === 'builtin_canvas' &&
-                      '點擊修圖直接在應用內開啟畫布，支援旋轉 90°、水平鏡像、調節明暗對比與重點塗鴉。'}
-                    {editorPref.type === 'photopea' &&
-                      '開啟 Photopea 線上強大修圖網頁，修圖儲存後回傳替換。'}
+                      '100% 離線免連網：支援自由/多比例裁切 (1:1, 4:3, 16:9)、智慧一鍵去背/魔術吸管、旋轉 90°、水平鏡像、調節明暗與筆刷塗鴉。'}
+                    {editorPref.type === 'system_gallery' &&
+                      '點擊自動將照片儲存/下載至手機相簿，可直接使用手機自帶「照片」App 的標註/編輯功能，完成後一鍵選回更新。'}
+                    {editorPref.type === 'system_share' &&
+                      '點擊修圖將開啟手機系統原生分享選單，直接發送至 Snapseed、美圖秀秀、Lightroom 等。'}
                     {editorPref.type === 'custom_scheme' &&
                       `調用協議：${editorPref.customScheme || '未填寫'}`}
                     {editorPref.type === 'ask_every_time' &&
