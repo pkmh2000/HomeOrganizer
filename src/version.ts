@@ -3,8 +3,8 @@
  * Can be automatically bumped during GitHub Sync / CI-CD or via `npm run bump`.
  */
 
-export const APP_VERSION = '1.00.07'; // 遞增版號
-export const APP_BUILD_TIME = '2026-10-31T07:35:00.000Z'; // 建置發布時間戳
+export const APP_VERSION = '1.00.08'; // 遞增版號
+export const APP_BUILD_TIME = '2026-10-31T11:33:50.083Z'; // 建置發布時間戳
 export const APP_RELEASE_STAGE = 'beta_iteration'; // 測試迭代版 (正式上線將重置為 v1.0.0)
 
 export interface VersionChangeLog {
