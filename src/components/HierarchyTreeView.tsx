@@ -20,12 +20,35 @@ interface HierarchyTreeViewProps {
   onNavigateToContainer: (containerId: string | null) => void;
 }
 
+const STORAGE_KEY_TREE_EXPANDED = 'homeorganizer_tree_expanded_ids_v1';
+
+const loadExpandedIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_TREE_EXPANDED);
+    if (!raw) return new Set(); // 預設全部收合 (Default All Collapsed)
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return new Set(parsed);
+    }
+    return new Set();
+  } catch {
+    return new Set();
+  }
+};
+
+const saveExpandedIds = (ids: Set<string>) => {
+  try {
+    localStorage.setItem(STORAGE_KEY_TREE_EXPANDED, JSON.stringify(Array.from(ids)));
+  } catch {}
+};
+
 export const HierarchyTreeView: React.FC<HierarchyTreeViewProps> = ({
   nodes,
   onSelectNode,
   onNavigateToContainer,
 }) => {
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(nodes.map((n) => n.id)));
+  // 樹狀層級 預設全部收合，後續個別開合由 user 選，離開保留最後開合狀況
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => loadExpandedIds());
   const [filterText, setFilterText] = useState('');
 
   const toggleExpand = (id: string, e: React.MouseEvent) => {
@@ -34,16 +57,21 @@ export const HierarchyTreeView: React.FC<HierarchyTreeViewProps> = ({
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      saveExpandedIds(next);
       return next;
     });
   };
 
   const expandAll = () => {
-    setExpandedIds(new Set(nodes.map((n) => n.id)));
+    const next = new Set(nodes.map((n) => n.id));
+    setExpandedIds(next);
+    saveExpandedIds(next);
   };
 
   const collapseAll = () => {
-    setExpandedIds(new Set());
+    const next = new Set<string>();
+    setExpandedIds(next);
+    saveExpandedIds(next);
   };
 
   // Render a single branch node recursively

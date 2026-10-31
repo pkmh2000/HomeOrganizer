@@ -57,6 +57,25 @@ export function clearPhotoEditorPreference(): void {
   } catch {}
 }
 
+export function isFirstTimePhotoEditor(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY_PHOTO_EDITOR) === null;
+  } catch {
+    return false;
+  }
+}
+
+export function hasBoundPhotoEditor(): boolean {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_PHOTO_EDITOR);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    return Boolean(parsed && parsed.type && parsed.type !== 'ask_every_time');
+  } catch {
+    return false;
+  }
+}
+
 export function getPhotoEditorDisplayName(type: PhotoEditorType, customName?: string): string {
   switch (type) {
     case 'builtin_canvas':

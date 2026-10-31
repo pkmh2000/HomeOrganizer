@@ -26,6 +26,8 @@ import {
   getPhotoEditorDisplayName,
   invokeSystemShareForPhoto,
   downloadPhotoToDevice,
+  isFirstTimePhotoEditor,
+  hasBoundPhotoEditor,
 } from '../utils/photoEditorManager';
 import { BuiltinPhotoEditorModal } from './BuiltinPhotoEditorModal';
 
@@ -34,6 +36,7 @@ interface PhotoEditorSelectorModalProps {
   photoUrl: string;
   onPhotoUpdated: (updatedBase64: string) => void;
   onClose: () => void;
+  forceShowSelector?: boolean;
 }
 
 export const PhotoEditorSelectorModal: React.FC<PhotoEditorSelectorModalProps> = ({
@@ -41,23 +44,58 @@ export const PhotoEditorSelectorModal: React.FC<PhotoEditorSelectorModalProps> =
   photoUrl,
   onPhotoUpdated,
   onClose,
+  forceShowSelector = false,
 }) => {
   const currentPref = loadPhotoEditorPreference();
+  const isFirstTime = isFirstTimePhotoEditor();
+  const shouldAutoDirectLaunch = !forceShowSelector && !isFirstTime && currentPref.type !== 'ask_every_time';
+
   const [selectedType, setSelectedType] = useState<PhotoEditorType>(
     currentPref.type === 'ask_every_time' ? 'builtin_canvas' : currentPref.type
   );
-  const [rememberBinding, setRememberBinding] = useState<boolean>(
-    currentPref.type !== 'ask_every_time'
-  );
+  // 初次使用時預設勾選「記住此選擇」，讓下次直接套用
+  const [rememberBinding, setRememberBinding] = useState<boolean>(true);
   const [customScheme, setCustomScheme] = useState<string>(currentPref.customScheme || '');
   const [customName, setCustomName] = useState<string>(currentPref.customName || '');
 
   // Modal sub-states
-  const [isBuiltinOpen, setIsBuiltinOpen] = useState<boolean>(false);
-  const [isAwaitingExternalReturn, setIsAwaitingExternalReturn] = useState<boolean>(false);
+  const [isBuiltinOpen, setIsBuiltinOpen] = useState<boolean>(() => {
+    return shouldAutoDirectLaunch && currentPref.type === 'builtin_canvas';
+  });
+  const [isAwaitingExternalReturn, setIsAwaitingExternalReturn] = useState<boolean>(() => {
+    return shouldAutoDirectLaunch && currentPref.type !== 'builtin_canvas';
+  });
   const [shareNotice, setShareNotice] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const hasAutoLaunchedRef = useRef<boolean>(false);
+
+  // If already bound, auto-launch external or gallery tools on mount
+  React.useEffect(() => {
+    if (!isOpen || !shouldAutoDirectLaunch || hasAutoLaunchedRef.current) return;
+    hasAutoLaunchedRef.current = true;
+
+    if (currentPref.type === 'system_gallery') {
+      downloadPhotoToDevice(photoUrl, `item_${Date.now()}.jpg`);
+      setShareNotice('已自動儲存照片至裝置相簿！請於手機自帶「照片」App 編輯標註後，點擊下方選取替換。');
+    } else if (currentPref.type === 'system_share') {
+      invokeSystemShareForPhoto(photoUrl, '編輯收納物品照片').then((res) => {
+        setShareNotice(res.message);
+        if (res.fallbackNeeded) {
+          setIsBuiltinOpen(true);
+        }
+      });
+    } else if (currentPref.type === 'custom_scheme') {
+      if (currentPref.customScheme?.trim()) {
+        try {
+          window.location.href = currentPref.customScheme.trim();
+        } catch {
+          window.open(currentPref.customScheme.trim(), '_blank');
+        }
+      }
+      setShareNotice('已嘗試自動調用自訂修圖應用！修圖完成後請點擊下方選取替換。');
+    }
+  }, [isOpen, shouldAutoDirectLaunch, currentPref, photoUrl]);
 
   if (!isOpen) return null;
 
@@ -130,6 +168,9 @@ export const PhotoEditorSelectorModal: React.FC<PhotoEditorSelectorModalProps> =
     setTimeout(() => setShareNotice(null), 3000);
   };
 
+  // When directly launching the builtin canvas editor, don't show the background dialog
+  const showBackgroundDialog = !shouldAutoDirectLaunch || isAwaitingExternalReturn;
+
   return (
     <>
       {/* Built-in Canvas Editor Modal */}
@@ -143,11 +184,7 @@ export const PhotoEditorSelectorModal: React.FC<PhotoEditorSelectorModalProps> =
         }}
         onClose={() => {
           setIsBuiltinOpen(false);
-          if (isAwaitingExternalReturn) {
-            // Keep awaiting screen open
-          } else {
-            onClose();
-          }
+          onClose();
         }}
       />
 
@@ -161,32 +198,41 @@ export const PhotoEditorSelectorModal: React.FC<PhotoEditorSelectorModalProps> =
       />
 
       {/* Selector & Awaiting Return Dialog */}
-      <div className="fixed inset-0 z-[65] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
-        <div className="w-full max-w-md bg-slate-900 border border-teal-500/40 rounded-3xl shadow-2xl p-5 sm:p-6 space-y-4 max-h-[92vh] overflow-y-auto">
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-2xl bg-teal-500/20 text-teal-400 flex items-center justify-center">
-                <Palette className="w-5 h-5" />
+      {showBackgroundDialog && (
+        <div className="fixed inset-0 z-[65] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-md bg-slate-900 border border-teal-500/40 rounded-3xl shadow-2xl p-5 sm:p-6 space-y-4 max-h-[92vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-2xl bg-teal-500/20 text-teal-400 flex items-center justify-center">
+                  <Palette className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">
+                    {isAwaitingExternalReturn
+                      ? '外部修圖後回傳'
+                      : isFirstTime
+                      ? '初次使用：設定修圖方式'
+                      : forceShowSelector
+                      ? '更換修圖方式'
+                      : '選擇照片編輯方式 (100% 離線)'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    {isAwaitingExternalReturn
+                      ? '修圖完成後將最新照片更新至收納卡片'
+                      : isFirstTime
+                      ? '選定綁定後，以後點「修圖」直接套用進編輯（可在「設置」更換）'
+                      : '離線修圖 · 自由裁切 · 智慧去背 · 系統相簿標註'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-bold text-white">
-                  {isAwaitingExternalReturn ? '外部修圖後回傳' : '選擇照片編輯方式 (100% 離線)'}
-                </h3>
-                <p className="text-[11px] text-slate-400">
-                  {isAwaitingExternalReturn
-                    ? '修圖完成後將最新照片更新至收納卡片'
-                    : '離線修圖 · 自由裁切 · 智慧去背 · 系統相簿標註'}
-                </p>
-              </div>
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
 
           {/* Body A: Awaiting external photo return */}
           {isAwaitingExternalReturn ? (
@@ -452,6 +498,7 @@ export const PhotoEditorSelectorModal: React.FC<PhotoEditorSelectorModalProps> =
           )}
         </div>
       </div>
-    </>
-  );
+    )}
+  </>
+);
 };

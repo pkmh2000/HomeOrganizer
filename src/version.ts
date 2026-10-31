@@ -4,7 +4,7 @@
  */
 
 export const APP_VERSION = '1.00.09'; // 遞增版號
-export const APP_BUILD_TIME = '2026-10-31T12:10:50.233Z'; // 建置發布時間戳
+export const APP_BUILD_TIME = '2026-10-31T12:55:00.000Z'; // 建置發布時間戳
 export const APP_RELEASE_STAGE = 'beta_iteration'; // 測試迭代版 (正式上線將重置為 v1.0.0)
 
 export interface VersionChangeLog {
@@ -14,6 +14,15 @@ export interface VersionChangeLog {
 }
 
 export const APP_CHANGELOG: VersionChangeLog[] = [
+  {
+    version: '1.00.09',
+    date: '2026-10-31',
+    changes: [
+      '照片編輯初次綁定與自動直接套用：初次使用修圖時彈出綁定設定畫面，選定偏好工具（如推薦的內建畫布修圖或相簿標註）並記憶後，後續點擊修圖直接套用進編輯，無需再彈出選項；如需更換或解除，可在「設置 ➔ 修圖綁定與帳號」隨時更換。',
+      '內建畫布修圖「儲存修圖」全自動套用變更：點擊上方「儲存修圖」時，自動全面將待套用的裁切邊界、去背純色底色、旋轉鏡像、明暗對比濾鏡與手繪塗鴉合成匯出，無需在底部分別點擊多個套用按鈕；上方按鈕佈局安全，有效防止誤觸。',
+      '樹狀層級預設全收合與離開狀態持久化保存：層級收納樹狀清單初次開啟預設全部收合，後續個別開合操作均自動持久化儲存於本機，離開頁面或重啟 App 均 100% 保留最後的展開/收合狀態。',
+    ],
+  },
   {
     version: '1.00.08',
     date: '2026-10-31',

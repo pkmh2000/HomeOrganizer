@@ -78,20 +78,21 @@ export const BuiltinPhotoEditorModal: React.FC<BuiltinPhotoEditorModalProps> = (
 
   // Crop Tool State (Normalized 0.0 ~ 1.0)
   const [cropRatio, setCropRatio] = useState<AspectRatioType>('free');
+  const [hasUserAdjustedCrop, setHasUserAdjustedCrop] = useState<boolean>(false);
   const [cropRect, setCropRect] = useState<{ x: number; y: number; width: number; height: number }>({
-    x: 0.05,
-    y: 0.05,
-    width: 0.9,
-    height: 0.9,
+    x: 0,
+    y: 0,
+    width: 1,
+    height: 1,
   });
   const [isDraggingCrop, setIsDraggingCrop] = useState<boolean>(false);
   const [dragHandle, setDragHandle] = useState<'move' | 'nw' | 'ne' | 'se' | 'sw' | null>(null);
   const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [dragStartRect, setDragStartRect] = useState<{ x: number; y: number; width: number; height: number }>({
-    x: 0.05,
-    y: 0.05,
-    width: 0.9,
-    height: 0.9,
+    x: 0,
+    y: 0,
+    width: 1,
+    height: 1,
   });
 
   // Cutout Tool State (100% Offline Background Removal)
@@ -150,7 +151,8 @@ export const BuiltinPhotoEditorModal: React.FC<BuiltinPhotoEditorModalProps> = (
     setIsEraserActive(false);
     setIsMagicWandActive(false);
     setActiveTab('crop');
-    setCropRect({ x: 0.05, y: 0.05, width: 0.9, height: 0.9 });
+    setCropRect({ x: 0, y: 0, width: 1, height: 1 });
+    setHasUserAdjustedCrop(false);
     loadImage(photoUrl);
   }, [isOpen, photoUrl, loadImage]);
 
@@ -264,6 +266,7 @@ export const BuiltinPhotoEditorModal: React.FC<BuiltinPhotoEditorModalProps> = (
       return;
     }
 
+    setHasUserAdjustedCrop(true);
     let targetRatio = 1;
     if (ratio === '1:1') targetRatio = 1;
     else if (ratio === '4:3') targetRatio = 4 / 3;
@@ -292,6 +295,7 @@ export const BuiltinPhotoEditorModal: React.FC<BuiltinPhotoEditorModalProps> = (
   const handleStartCropDrag = (handle: 'move' | 'nw' | 'ne' | 'se' | 'sw', e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
     setIsDraggingCrop(true);
+    setHasUserAdjustedCrop(true);
     setDragHandle(handle);
     const { normX, normY } = getCanvasCoords(e);
     setDragStartPos({ x: normX, y: normY });
@@ -367,7 +371,8 @@ export const BuiltinPhotoEditorModal: React.FC<BuiltinPhotoEditorModalProps> = (
     const croppedBase64 = cropCanvas.toDataURL('image/png');
 
     pushHistory(croppedBase64);
-    setCropRect({ x: 0.05, y: 0.05, width: 0.9, height: 0.9 });
+    setCropRect({ x: 0, y: 0, width: 1, height: 1 });
+    setHasUserAdjustedCrop(false);
     setCutoutNotice('✅ 已套用裁切！');
     setTimeout(() => setCutoutNotice(null), 2500);
   };
@@ -541,17 +546,56 @@ export const BuiltinPhotoEditorModal: React.FC<BuiltinPhotoEditorModalProps> = (
   };
 
   // ----------------------------------------------------
-  // SAVE RESULT (支援透明 PNG 或乾淨白底 JPEG)
+  // SAVE RESULT (儲存修圖：自動套用所有變更，免二次確認)
   // ----------------------------------------------------
   const handleSaveResult = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Check if image has transparency
-    const ctx = canvas.getContext('2d');
+    let outputCanvas = canvas;
+
+    // 儲存時：若有調整裁切範圍且尚未點擊套用，直接自動套用裁切變更！
+    const needsPendingCrop =
+      hasUserAdjustedCrop &&
+      (cropRect.x > 0.005 || cropRect.y > 0.005 || cropRect.width < 0.99 || cropRect.height < 0.99);
+
+    if (needsPendingCrop) {
+      const sourceX = Math.max(0, Math.round(cropRect.x * canvas.width));
+      const sourceY = Math.max(0, Math.round(cropRect.y * canvas.height));
+      const sourceW = Math.min(canvas.width - sourceX, Math.round(cropRect.width * canvas.width));
+      const sourceH = Math.min(canvas.height - sourceY, Math.round(cropRect.height * canvas.height));
+
+      if (sourceW > 10 && sourceH > 10) {
+        const cropCanvas = document.createElement('canvas');
+        cropCanvas.width = sourceW;
+        cropCanvas.height = sourceH;
+        const cropCtx = cropCanvas.getContext('2d');
+        if (cropCtx) {
+          cropCtx.drawImage(canvas, sourceX, sourceY, sourceW, sourceH, 0, 0, sourceW, sourceH);
+          outputCanvas = cropCanvas;
+        }
+      }
+    }
+
+    // 儲存時：若去背後選擇了純色背景 (非透明)，直接合成純色底色
+    if (cutoutBgColor !== 'transparent') {
+      const bgCanvas = document.createElement('canvas');
+      bgCanvas.width = outputCanvas.width;
+      bgCanvas.height = outputCanvas.height;
+      const bgCtx = bgCanvas.getContext('2d');
+      if (bgCtx) {
+        bgCtx.fillStyle = cutoutBgColor;
+        bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
+        bgCtx.drawImage(outputCanvas, 0, 0);
+        outputCanvas = bgCanvas;
+      }
+    }
+
+    // 檢查是否有透明像素
+    const outCtx = outputCanvas.getContext('2d');
     let hasAlpha = false;
-    if (ctx) {
-      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    if (outCtx && cutoutBgColor === 'transparent') {
+      const data = outCtx.getImageData(0, 0, outputCanvas.width, outputCanvas.height).data;
       for (let i = 3; i < data.length; i += 16) {
         if (data[i] < 250) {
           hasAlpha = true;
@@ -562,8 +606,8 @@ export const BuiltinPhotoEditorModal: React.FC<BuiltinPhotoEditorModalProps> = (
 
     // If transparent or requested transparent, export PNG; else JPEG 90%
     const finalBase64 = hasAlpha
-      ? canvas.toDataURL('image/png')
-      : canvas.toDataURL('image/jpeg', 0.9);
+      ? outputCanvas.toDataURL('image/png')
+      : outputCanvas.toDataURL('image/jpeg', 0.9);
 
     onSave(finalBase64);
     onClose();

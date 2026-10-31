@@ -990,6 +990,7 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
         <PhotoEditorSelectorModal
           isOpen={isEditorSelectorOpen}
           photoUrl={SAMPLE_TEST_PHOTO}
+          forceShowSelector={true}
           onPhotoUpdated={(updated) => {
             const fresh = loadPhotoEditorPreference();
             setEditorPref(fresh);
