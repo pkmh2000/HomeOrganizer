@@ -19,10 +19,12 @@ import {
   Info,
   Calendar,
   AlertCircle,
+  Sliders,
 } from 'lucide-react';
 import { InventoryNode, NodeType, StorageSpace, StagingDraftCard } from '../types';
 import { saveGalleryPhoto, loadStagingDrafts, saveStagingDrafts, clearStagingDrafts } from '../utils/storage';
 import { compressImageFile } from '../utils/imageCompressor';
+import { PhotoEditorSelectorModal } from './PhotoEditorSelectorModal';
 
 export interface BatchPhotoIntakeModalProps {
   isOpen: boolean;
@@ -65,6 +67,24 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
   const [aiAnalysisProgress, setAiAnalysisProgress] = useState('');
   const [isProcessingPhotos, setIsProcessingPhotos] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
+
+  // Photo Editor state (supports calling installed app, binding, and built-in editor)
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
+  const [editingCardPhotoUrl, setEditingCardPhotoUrl] = useState<string | null>(null);
+
+  const handleOpenDraftPhotoEditor = (cardId: string, photoUrl: string) => {
+    setEditingCardId(cardId);
+    setEditingCardPhotoUrl(photoUrl);
+  };
+
+  const handleDraftPhotoUpdated = (updatedBase64: string) => {
+    if (!editingCardId) return;
+    updateDraft(editingCardId, { photoUrl: updatedBase64 });
+    setEditingCardId(null);
+    setEditingCardPhotoUrl(null);
+    setFeedbackMsg('🎨 照片已成功修圖並更新！');
+    setTimeout(() => setFeedbackMsg(null), 3500);
+  };
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -706,11 +726,19 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
                       )}
                     </button>
 
-                    <div className="w-20 h-20 rounded-xl overflow-hidden bg-slate-800 shrink-0 border border-slate-700/60 relative">
+                    <div className="w-20 h-20 rounded-xl overflow-hidden bg-slate-800 shrink-0 border border-slate-700/60 relative group">
                       <img src={card.photoUrl} alt="" className="w-full h-full object-cover" />
                       <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[10px] bg-black/75 text-white font-mono">
                         #{idx + 1}
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDraftPhotoEditor(card.id, card.photoUrl)}
+                        className="absolute bottom-1 right-1 p-1 rounded-md bg-black/80 hover:bg-teal-500 text-teal-300 hover:text-slate-950 transition shadow"
+                        title="調用外部修圖 App 或內建畫布工具"
+                      >
+                        <Sliders className="w-3 h-3" />
+                      </button>
                     </div>
                   </div>
 
@@ -823,6 +851,16 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
+                          onClick={() => handleOpenDraftPhotoEditor(card.id, card.photoUrl)}
+                          className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-750 text-teal-300 border border-slate-700 text-[11px] font-semibold flex items-center gap-1 transition active:scale-95"
+                          title="開啟修圖：調用已安裝照片編輯 App 或內建畫布工具"
+                        >
+                          <Sliders className="w-3 h-3 text-teal-400" />
+                          <span>修圖</span>
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => handleDepositSpecificCards([card], false)}
                           className="px-2 py-1 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 text-[11px] font-bold flex items-center gap-1 transition active:scale-95"
                           title="將此張直接存入目前選定目的地，剩餘照片繼續保留於暫存區"
@@ -891,6 +929,19 @@ export const BatchPhotoIntakeModal: React.FC<BatchPhotoIntakeModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* External / Built-in Photo Editor Modal */}
+      {editingCardPhotoUrl && (
+        <PhotoEditorSelectorModal
+          isOpen={!!editingCardPhotoUrl}
+          photoUrl={editingCardPhotoUrl}
+          onPhotoUpdated={handleDraftPhotoUpdated}
+          onClose={() => {
+            setEditingCardPhotoUrl(null);
+            setEditingCardId(null);
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -758,6 +758,7 @@ export default function App() {
         redoCount={redoCount}
         onOpenGallery={() => setIsGalleryOpen(true)}
         onOpenAccountSpace={() => setIsAccountSpaceModalOpen(true)}
+        onLogout={handleLogout}
         hasUpdateAvailable={hasUpdateAvailable}
         activeUser={activeUser}
         activeSpaceName={activeSpaceName}
@@ -872,9 +873,11 @@ export default function App() {
             members={members}
             householdName={householdName}
             activeUserEmail={authSession.account?.email}
+            activeUser={activeUser}
             onUpdateHouseholdName={setHouseholdName}
             onRestoreData={handleRestoreData}
             onClose={() => handleTabChange('dashboard')}
+            onLogout={handleLogout}
           />
         )}
 

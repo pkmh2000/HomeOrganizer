@@ -26,6 +26,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  LogOut,
 } from 'lucide-react';
 import { StorageSpace, UserProfile, InventoryNode } from '../types';
 import {
@@ -319,12 +320,34 @@ export const AccountSpaceModal: React.FC<AccountSpaceModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {onLogout && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `確定要登出目前帳號「${activeUser.name}」嗎？\n登出後資料庫將安全鎖定，需重新驗證身分登入。`
+                    )
+                  ) {
+                    onClose();
+                    onLogout();
+                  }
+                }}
+                className="px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition flex items-center gap-1.5 active:scale-95 shadow-sm"
+                title="登出帳戶並安全鎖定"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">登出 (Logout)</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Tab Switcher */}
@@ -403,13 +426,20 @@ export const AccountSpaceModal: React.FC<AccountSpaceModalProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        onClose();
-                        onLogout();
+                        if (
+                          window.confirm(
+                            `確定要登出目前帳號「${activeUser.name}」嗎？\n登出後資料庫將安全鎖定，需重新驗證身分登入。`
+                          )
+                        ) {
+                          onClose();
+                          onLogout();
+                        }
                       }}
-                      className="px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold transition"
-                      title="鎖定當前畫面並切換登入帳號"
+                      className="px-3.5 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition flex items-center gap-1.5 active:scale-95 shadow-sm"
+                      title="登出目前帳號並安全鎖定"
                     >
-                      切換/鎖定帳號
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>登出帳戶 (Logout)</span>
                     </button>
                   )}
                 </div>

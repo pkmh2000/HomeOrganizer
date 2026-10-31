@@ -24,8 +24,14 @@ import {
   Plus,
   Server,
   ArrowRightLeft,
+  Palette,
+  LogOut,
+  Sliders,
+  Sparkles,
+  CheckCircle2,
+  ExternalLink,
 } from 'lucide-react';
-import { InventoryNode, FamilyMemo, HouseholdData, LocalSnapshot, ExportDestination } from '../types';
+import { InventoryNode, FamilyMemo, HouseholdData, LocalSnapshot, ExportDestination, UserProfile } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
 import { DatabaseDestinationManager } from './DatabaseDestinationManager';
 import {
@@ -43,7 +49,13 @@ import {
   APP_VERSION,
 } from '../utils/storage';
 import { checkOnlineUpdate, performSmoothUpdate } from '../utils/versionCheck';
-
+import {
+  PhotoEditorPreference,
+  loadPhotoEditorPreference,
+  clearPhotoEditorPreference,
+  getPhotoEditorDisplayName,
+} from '../utils/photoEditorManager';
+import { PhotoEditorSelectorModal } from './PhotoEditorSelectorModal';
 
 interface BackupShareModalProps {
   nodes: InventoryNode[];
@@ -51,9 +63,11 @@ interface BackupShareModalProps {
   members: string[];
   householdName: string;
   activeUserEmail?: string;
+  activeUser?: UserProfile;
   onUpdateHouseholdName: (name: string) => void;
   onRestoreData: (nodes: InventoryNode[], memos: FamilyMemo[]) => void;
   onClose: () => void;
+  onLogout?: () => void;
 }
 
 export const BackupShareModal: React.FC<BackupShareModalProps> = ({
@@ -62,9 +76,11 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
   members,
   householdName,
   activeUserEmail,
+  activeUser,
   onUpdateHouseholdName,
   onRestoreData,
   onClose,
+  onLogout,
 }) => {
   const [copied, setCopied] = useState(false);
   const [dataCopied, setDataCopied] = useState(false);
@@ -255,7 +271,29 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
     }
   };
 
-  const [subTab, setSubTab] = useState<'destination' | 'backup' | 'system'>('destination');
+  const [subTab, setSubTab] = useState<'destination' | 'backup' | 'editor' | 'system'>('destination');
+  const [editorPref, setEditorPref] = useState<PhotoEditorPreference>(() => loadPhotoEditorPreference());
+  const [isEditorSelectorOpen, setIsEditorSelectorOpen] = useState(false);
+  const [editorNotice, setEditorNotice] = useState<string | null>(null);
+
+  const SAMPLE_TEST_PHOTO = `data:image/svg+xml;utf8,${encodeURIComponent(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+      <rect width="600" height="400" fill="#090d16" rx="24"/>
+      <rect x="24" y="24" width="552" height="352" fill="#0f172a" rx="16" stroke="#0d9488" stroke-width="3" stroke-dasharray="8 6"/>
+      <circle cx="300" cy="170" r="60" fill="#134e4a"/>
+      <text x="300" y="180" font-size="64" text-anchor="middle" dominant-baseline="central">📸</text>
+      <text x="300" y="270" font-family="system-ui, sans-serif" font-size="22" font-weight="bold" fill="#2dd4bf" text-anchor="middle">照片編輯器調用測試圖</text>
+      <text x="300" y="306" font-family="system-ui, sans-serif" font-size="13" fill="#94a3b8" text-anchor="middle">HomeOrganizer Photo Editor Test Sample</text>
+    </svg>
+  `)}`;
+
+  const handleCancelEditorBinding = () => {
+    clearPhotoEditorPreference();
+    const updated = loadPhotoEditorPreference();
+    setEditorPref(updated);
+    setEditorNotice('✅ 已成功解除照片編輯器綁定！下次修圖時將由您自由選擇，避免 App 被移除後無法連結。');
+    setTimeout(() => setEditorNotice(null), 4000);
+  };
 
   const handlePerformUpdate = async () => {
     setIsUpdating(true);
@@ -283,37 +321,50 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
       />
 
       {/* SUB-TAB NAVIGATOR */}
-      <div className="flex items-center gap-1 p-1 rounded-2xl bg-slate-900 border border-slate-800 text-xs font-bold shadow-md">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 p-1 rounded-2xl bg-slate-900 border border-slate-800 text-xs font-bold shadow-md">
         <button
           type="button"
           onClick={() => setSubTab('destination')}
-          className={`flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition text-[11px] sm:text-xs ${
+          className={`py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition text-[11px] sm:text-xs ${
             subTab === 'destination'
               ? 'bg-teal-500 text-slate-950 shadow-md font-black'
               : 'text-slate-400 hover:text-white'
           }`}
         >
           <Server className="w-3.5 h-3.5" />
-          <span>資料庫目的地與搬遷</span>
+          <span>資料庫目的地</span>
         </button>
 
         <button
           type="button"
           onClick={() => setSubTab('backup')}
-          className={`flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition text-[11px] sm:text-xs ${
+          className={`py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition text-[11px] sm:text-xs ${
             subTab === 'backup'
               ? 'bg-teal-500 text-slate-950 shadow-md font-black'
               : 'text-slate-400 hover:text-white'
           }`}
         >
           <Bookmark className="w-3.5 h-3.5" />
-          <span>備份快照庫</span>
+          <span>快照與匯出</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubTab('editor')}
+          className={`py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition text-[11px] sm:text-xs ${
+            subTab === 'editor'
+              ? 'bg-teal-500 text-slate-950 shadow-md font-black'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Palette className="w-3.5 h-3.5" />
+          <span>修圖綁定與帳號</span>
         </button>
 
         <button
           type="button"
           onClick={() => setSubTab('system')}
-          className={`flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition text-[11px] sm:text-xs ${
+          className={`py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition text-[11px] sm:text-xs ${
             subTab === 'system'
               ? 'bg-teal-500 text-slate-950 shadow-md font-black'
               : 'text-slate-400 hover:text-white'
@@ -426,6 +477,196 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
         </div>
       </div>
     )}
+
+      {/* TAB 4: 照片編輯器調用綁定管理與帳號登出 */}
+      {subTab === 'editor' && (
+        <div className="space-y-4 animate-fade-in">
+          {/* Notification banner if any */}
+          {editorNotice && (
+            <div className="p-3.5 rounded-2xl bg-teal-950/90 border border-teal-500/50 text-xs text-teal-200 flex items-center justify-between shadow-lg">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />
+                <span>{editorNotice}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditorNotice(null)}
+                className="text-teal-400 hover:text-white px-2 py-0.5 rounded text-xs"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* SECTION 1: PHOTO EDITOR APP BINDING */}
+          <div className="p-4 sm:p-5 rounded-3xl bg-slate-900 border border-teal-500/40 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-teal-500/20 text-teal-400 flex items-center justify-center">
+                  <Palette className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-100 text-sm">照片編輯器調用與綁定設定</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    拍照收納或物件修圖時調用慣用 App，支援隨時更換或取消
+                  </p>
+                </div>
+              </div>
+              <span
+                className={`px-2.5 py-0.8 rounded-full text-[10px] font-bold border ${
+                  editorPref.type !== 'ask_every_time'
+                    ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
+                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                }`}
+              >
+                {editorPref.type !== 'ask_every_time' ? '🟢 已綁定' : '⚪ 每次詢問'}
+              </span>
+            </div>
+
+            {/* Current Binding Card */}
+            <div className="p-3.5 rounded-2xl bg-slate-850/80 border border-slate-750 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400">目前偏好調用方式：</span>
+                {editorPref.boundAt && (
+                  <span className="text-[10px] text-slate-500">
+                    設定於: {new Date(editorPref.boundAt).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center text-teal-400 shrink-0">
+                  {editorPref.type === 'system_share' && <Smartphone className="w-5 h-5" />}
+                  {editorPref.type === 'builtin_canvas' && <Sliders className="w-5 h-5" />}
+                  {editorPref.type === 'photopea' && <Sparkles className="w-5 h-5" />}
+                  {editorPref.type === 'custom_scheme' && <ExternalLink className="w-5 h-5" />}
+                  {editorPref.type === 'ask_every_time' && <Palette className="w-5 h-5" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-xs font-bold text-white truncate">
+                    {getPhotoEditorDisplayName(editorPref.type, editorPref.customName)}
+                  </h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                    {editorPref.type === 'system_share' &&
+                      '點擊修圖將開啟手機系統原生分享選單，直接發送至 Snapseed、美圖秀秀、Lightroom、iOS照片標註 等。'}
+                    {editorPref.type === 'builtin_canvas' &&
+                      '點擊修圖直接在應用內開啟畫布，支援旋轉 90°、水平鏡像、調節明暗對比與重點塗鴉。'}
+                    {editorPref.type === 'photopea' &&
+                      '開啟 Photopea 線上強大修圖網頁，修圖儲存後回傳替換。'}
+                    {editorPref.type === 'custom_scheme' &&
+                      `調用協議：${editorPref.customScheme || '未填寫'}`}
+                    {editorPref.type === 'ask_every_time' &&
+                      '每次點擊照片「修圖」時，彈出選單由您自由選擇適合的修圖工具。'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Safety Guidance: 防止 App 移除後失效 */}
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200/90 space-y-1.5">
+              <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>防失效與更換保障機制</span>
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                若您手機上安裝的修圖 App 曾被移除、更新或想要切換為其他工具，請點擊下方<strong>「更換編輯器」</strong>或<strong>「取消綁定」</strong>。取消綁定後將恢復為「每次詢問」，以確保修圖功能 100% 正常連結不中斷！
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2 flex-wrap pt-1">
+              <button
+                type="button"
+                onClick={() => setIsEditorSelectorOpen(true)}
+                className="flex-1 min-w-[130px] py-2.5 px-3 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow transition active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                <Sliders className="w-3.5 h-3.5 stroke-[2.2]" />
+                <span>更換照片編輯器</span>
+              </button>
+
+              {editorPref.type !== 'ask_every_time' && (
+                <button
+                  type="button"
+                  onClick={handleCancelEditorBinding}
+                  className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 text-amber-300 hover:text-white border border-amber-500/30 font-semibold text-xs transition active:scale-95 flex items-center justify-center gap-1.5"
+                  title="解除固定綁定，恢復每次詢問"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>取消綁定 (恢復每次詢問)</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setIsEditorSelectorOpen(true)}
+                className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 border border-slate-700 font-semibold text-xs transition active:scale-95 flex items-center justify-center gap-1.5"
+                title="以測試範例照片體驗調用流程"
+              >
+                <span>測試調用</span>
+              </button>
+            </div>
+          </div>
+
+          {/* SECTION 2: USER ACCOUNT & LOGOUT (增加 logout 的機制) */}
+          <div className="p-4 sm:p-5 rounded-3xl bg-slate-900 border border-slate-850 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                  <LogOut className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-100 text-sm">帳戶登出與安全鎖定 (Logout)</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    登出後安全鎖定收納庫，防止共用裝置隱私外洩
+                  </p>
+                </div>
+              </div>
+              <span className="px-2.5 py-0.8 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                已登入運行中
+              </span>
+            </div>
+
+            {/* User Account Info */}
+            <div className="p-3.5 rounded-2xl bg-slate-850/80 border border-slate-750 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{activeUser?.avatar || '👤'}</span>
+                <div>
+                  <h4 className="text-xs font-bold text-white flex items-center gap-2">
+                    <span>{activeUser?.name || '收納使用者'}</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 font-mono">
+                      {activeUserEmail || '已綁定帳號'}
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    支援生物辨識 (Touch ID / Face ID) 快速解鎖登入
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-slate-800/40 border border-slate-700/60 text-xs text-slate-400 leading-relaxed">
+              💡 <strong>登出說明</strong>：按下「登出帳號」後，目前會話將安全鎖定。下次進入需再次輸入密碼或通過指紋/人臉辨識驗證，並可在登入頁隨時切換登入其他 Email 信箱帳號。
+            </div>
+
+            {/* Logout Action Button */}
+            <button
+              type="button"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `確定要登出目前帳號「${activeUser?.name || activeUserEmail || '使用者'}」嗎？\n登出後資料庫將安全鎖定，需重新驗證身分登入。`
+                  )
+                ) {
+                  onLogout?.();
+                }
+              }}
+              className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition active:scale-95"
+            >
+              <LogOut className="w-4 h-4 stroke-[2.5]" />
+              <span>🚪 登出當前帳戶 (Logout)</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* TAB 2: 備份匯出與版本快照庫 */}
       {subTab === 'backup' && (
@@ -743,6 +984,26 @@ export const BackupShareModal: React.FC<BackupShareModalProps> = ({
           <span>重置範例</span>
         </button>
       </div>
+
+      {/* Photo Editor Selector Modal for Settings */}
+      {isEditorSelectorOpen && (
+        <PhotoEditorSelectorModal
+          isOpen={isEditorSelectorOpen}
+          photoUrl={SAMPLE_TEST_PHOTO}
+          onPhotoUpdated={(updated) => {
+            const fresh = loadPhotoEditorPreference();
+            setEditorPref(fresh);
+            setEditorNotice('✅ 照片編輯器偏好設定已更新！');
+            setTimeout(() => setEditorNotice(null), 3500);
+            setIsEditorSelectorOpen(false);
+          }}
+          onClose={() => {
+            const fresh = loadPhotoEditorPreference();
+            setEditorPref(fresh);
+            setIsEditorSelectorOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 };

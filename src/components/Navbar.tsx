@@ -11,6 +11,7 @@ import {
   Users,
   Eye,
   EyeOff,
+  LogOut,
 } from 'lucide-react';
 import { ViewTab, UserProfile } from '../types';
 import { APP_VERSION } from '../version';
@@ -40,6 +41,7 @@ interface NavbarProps {
   hasUpdateAvailable?: boolean;
   onOpenGallery?: () => void;
   onOpenAccountSpace?: () => void;
+  onLogout?: () => void;
   activeUser?: UserProfile;
   activeSpaceName?: string;
   pureViewMode?: boolean;
@@ -67,6 +69,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   hasUpdateAvailable = false,
   onOpenGallery,
   onOpenAccountSpace,
+  onLogout,
   activeUser,
   activeSpaceName,
   pureViewMode = false,
@@ -95,7 +98,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* 右側：純顯示狀態標籤 (版本號、身分與更新標記，非邊角點擊區) */}
+        {/* 右側：純顯示狀態標籤 (版本號、身分、登出按鈕與更新標記，非邊角點擊區) */}
         <div className="flex items-center gap-1.5 shrink-0 text-[10px]">
           <span
             className="px-1.5 py-0.5 rounded-md bg-teal-500/15 text-teal-300 font-mono font-bold border border-teal-500/30"
@@ -103,10 +106,39 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             v{APP_VERSION}
           </span>
-          <span className="px-2 py-0.5 rounded-full bg-slate-800/80 text-slate-300 border border-slate-700/60 font-medium flex items-center gap-1">
+
+          {/* User Badge - click to open Account Space */}
+          <button
+            type="button"
+            onClick={onOpenAccountSpace}
+            className="px-2 py-0.5 rounded-full bg-slate-800/80 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-700/60 font-medium flex items-center gap-1 transition"
+            title="點擊管理收納身分與多空間"
+          >
             <span>{activeUser?.avatar || '👤'}</span>
             <span className="max-w-[70px] truncate">{activeUser?.name || '身分'}</span>
-          </span>
+          </button>
+
+          {/* Quick Logout Button */}
+          {onLogout && (
+            <button
+              type="button"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `確定要登出帳號「${activeUser?.name || '使用者'}」嗎？\n登出後資料庫將安全鎖定，需重新驗證密碼或生物辨識登入。`
+                  )
+                ) {
+                  onLogout();
+                }
+              }}
+              className="p-1 rounded-md bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 transition active:scale-95 flex items-center gap-0.5 text-[10px] font-bold"
+              title="登出當前帳戶 (Logout)"
+            >
+              <LogOut className="w-3 h-3" />
+              <span className="hidden sm:inline">登出</span>
+            </button>
+          )}
+
           {hasUpdateAvailable && (
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="有新版本程式" />
           )}

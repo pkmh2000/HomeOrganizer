@@ -166,6 +166,48 @@ export const UserLoginModal: React.FC<UserLoginModalProps> = ({ onLoginSuccess }
           </div>
         )}
 
+        {/* Quick Saved Accounts Switcher */}
+        {savedAccounts.length > 0 && (
+          <div className="p-2.5 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-1.5 text-xs">
+            <div className="flex items-center justify-between text-[11px] text-slate-400">
+              <span>本機已存帳戶快速切換：</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail('');
+                  setName('');
+                  setPassword('');
+                }}
+                className="text-slate-400 hover:text-teal-400 underline text-[10px]"
+              >
+                清空換其他 Email
+              </button>
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {savedAccounts.map((acc) => (
+                <button
+                  key={acc.id}
+                  type="button"
+                  onClick={() => {
+                    setEmail(acc.email);
+                    setName(acc.name);
+                    setPassword(acc.password || '');
+                    setRememberMe(acc.rememberMe);
+                    setBiometricsEnabled(acc.biometricsEnabled);
+                  }}
+                  className={`px-2.5 py-1 rounded-xl border text-[11px] font-medium transition ${
+                    email.toLowerCase() === acc.email.toLowerCase()
+                      ? 'bg-teal-500/20 text-teal-300 border-teal-500/50 font-bold'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                  }`}
+                >
+                  {acc.avatar} {acc.name} ({acc.email.split('@')[0]})
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Login / Register Form */}
         <form onSubmit={handleLoginSubmit} className="space-y-3.5">
           {/* Display Name (if registering) */}

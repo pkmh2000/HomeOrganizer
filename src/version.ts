@@ -4,7 +4,7 @@
  */
 
 export const APP_VERSION = '1.00.07'; // 遞增版號
-export const APP_BUILD_TIME = '2026-10-31T07:33:20.648Z'; // 建置發布時間戳
+export const APP_BUILD_TIME = '2026-10-31T07:35:00.000Z'; // 建置發布時間戳
 export const APP_RELEASE_STAGE = 'beta_iteration'; // 測試迭代版 (正式上線將重置為 v1.0.0)
 
 export interface VersionChangeLog {
@@ -14,6 +14,15 @@ export interface VersionChangeLog {
 }
 
 export const APP_CHANGELOG: VersionChangeLog[] = [
+  {
+    version: '1.00.07',
+    date: '2026-10-31',
+    changes: [
+      '拍照收納與物件編輯修圖功能：新增調用手機已安裝之照片編輯 App（系統原生分享支援 Snapseed、美圖秀秀、Lightroom、iOS照片標註、Canva 等）或內建畫布修圖工具（旋轉90°、水平鏡像、調光對比、塗鴉標記），支援暫時綁定為慣用編輯器。',
+      '設置專屬照片編輯器綁定管理：在設置內新增「修圖綁定與帳號」，可隨時更換 App 或取消綁定（恢復每次詢問），徹底避免 App 被移除後無法連結的問題，並提供測試調用功能。',
+      '完善 Logout 登出機制：頂部導覽列個人身分旁增設快速「登出 (Logout)」按鈕、帳號中心與設置中均配備醒目登出與安全鎖定機制，登出後畫面安全鎖定，支援快速切換本機已存帳戶或切換其他 Email 登入。',
+    ],
+  },
   {
     version: '1.00.06',
     date: '2026-10-29',

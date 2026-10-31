@@ -31,6 +31,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Maximize2,
+  Sliders,
 } from 'lucide-react';
 import { InventoryNode, Tag, NodeType, LoanStatus } from '../types';
 import {
@@ -46,6 +47,7 @@ import { compressImageFile } from '../utils/imageCompressor';
 import { BarcodeScannerModal } from './BarcodeScannerModal';
 import { PhotoGalleryModal } from './PhotoGalleryModal';
 import { ImageLightboxModal } from './ImageLightboxModal';
+import { PhotoEditorSelectorModal } from './PhotoEditorSelectorModal';
 
 interface ItemEditModalProps {
   isOpen: boolean;
@@ -109,6 +111,19 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
     setPreviewPhotoList(list);
     setPreviewPhotoIndex(idx);
     setPreviewPhotoUrl(list[idx]);
+  };
+
+  // Photo Editor state (supports calling installed app, binding, and built-in editor)
+  const [photoToEditIndex, setPhotoToEditIndex] = useState<number | null>(null);
+
+  const handlePhotoUpdated = (newBase64: string) => {
+    if (photoToEditIndex === null) return;
+    setFormData((prev) => {
+      const updated = [...(prev.photos || [])];
+      updated[photoToEditIndex] = newBase64;
+      return { ...prev, photos: updated };
+    });
+    setPhotoToEditIndex(null);
   };
 
   const handleAnalyzeWithGemini = async () => {
@@ -625,6 +640,19 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
                             {/* Bottom Index badge */}
                             <div className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded text-[10px] bg-black/80 text-slate-200 font-mono pointer-events-none border border-slate-800">
                               #{idx + 1}
+                            </div>
+
+                            {/* Bottom Right: Photo Editor Button */}
+                            <div className="absolute bottom-1.5 right-1.5 z-10" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                type="button"
+                                onClick={() => setPhotoToEditIndex(idx)}
+                                className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] bg-slate-900/95 hover:bg-teal-500 text-teal-300 hover:text-slate-950 font-bold border border-teal-500/50 transition active:scale-95 shadow-md"
+                                title="調用外部修圖 App 或內建修圖工具"
+                              >
+                                <Sliders className="w-3 h-3" />
+                                <span>修圖</span>
+                              </button>
                             </div>
                           </div>
 
@@ -1534,6 +1562,16 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
         initialIndex={previewPhotoIndex}
         title={formData.name ? `${formData.name} 照片大圖檢視` : '照片大圖檢視'}
       />
+
+      {/* External / Built-in Photo Editor Modal */}
+      {photoToEditIndex !== null && formData.photos && formData.photos[photoToEditIndex] && (
+        <PhotoEditorSelectorModal
+          isOpen={photoToEditIndex !== null}
+          photoUrl={formData.photos[photoToEditIndex]}
+          onPhotoUpdated={handlePhotoUpdated}
+          onClose={() => setPhotoToEditIndex(null)}
+        />
+      )}
     </div>
   );
 };
